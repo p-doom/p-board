@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL TensorBoard Alternative</title>
+    <link rel="stylesheet" href="style.css">
+
+</head>
+<body>
+    <h1>Experiment Metrics Dashboard</h1>
+
+    <div id="dashboard-container">
+        <!-- Plots will be dynamically added here by JavaScript -->
+    </div>
+
+    <div class="info">
+         <p>Using <a href="https://github.com/danchitnis/webgl-plot" target="_blank" rel="noopener">webgl-plot</a> library.</p>
+         <p>Interaction: Mouse wheel = zoom; Right-click + drag = pan; Left-click + drag = area zoom; Double-click = reset view.</p>
+    </div>
+
+    <!-- Load the webgl-plot UMD bundle from CDN -->
+    <!-- This MUST come BEFORE main.js -->
+    <script src="https://cdn.jsdelivr.net/gh/danchitnis/webgl-plot@master/dist/webglplot.umd.min.js"></script>
+
+    <!-- Load your application script -->
+    <script type="module" src="main.js"></script>
+</body>
+</html>

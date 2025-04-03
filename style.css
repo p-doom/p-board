@@ -1,0 +1,58 @@
+body {
+    font-family: sans-serif;
+    background-color: #282c34;
+    color: #f0f0f0;
+    margin: 0;
+    padding: 20px;
+}
+
+h1 {
+    text-align: center;
+    color: #61dafb;
+}
+
+#dashboard-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); /* Responsive grid */
+    gap: 20px; /* Spacing between plots */
+    margin-bottom: 20px;
+}
+
+.plot-wrapper {
+    border: 1px solid #444;
+    background-color: #333;
+    border-radius: 5px;
+    padding: 10px;
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+    min-height: 300px; /* Ensure wrappers have some height */
+    display: flex; /* Use flexbox for internal layout */
+    flex-direction: column;
+}
+
+.plot-wrapper h3 {
+    margin: 0 0 10px 0;
+    text-align: center;
+    font-size: 1.1em;
+    color: #eee;
+}
+
+.plot-canvas {
+    width: 100%;
+    height: 300px; /* Fixed height, adjust as needed */
+    /* height: 0; /* Start with 0 height */
+    /* padding-bottom: 75%; /* Maintain aspect ratio (e.g., 4:3) if needed */
+    /* position: relative; */
+    flex-grow: 1; /* Canvas takes remaining space */
+    display: block; /* Remove extra space below canvas */
+}
+
+.info {
+    margin-top: 30px;
+    text-align: center;
+    font-size: 0.9em;
+    color: #aaa;
+}
+
+.info a {
+    color: #61dafb;
+}
