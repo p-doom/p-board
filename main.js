@@ -40,10 +40,12 @@ const PLOT_CONFIGS = [
     }
 ];
 
-// --- Store plot instances ---
-const plots = {}; // { plotId: WebglPlot }
+// --- Store plot instances AND their associated zoom rectangle lines ---
+// Now stores objects like: { plotId: { wglp: WebglPlot, zoomRectLine: WebglLine } }
+const plots = {};
 
 // --- Static Data Generation Function ---
+// ... (generateStaticData function remains the same)
 function generateStaticData(type, numPoints) {
     const data = new Float32Array(numPoints);
     let currentVal = 0.5;
@@ -104,12 +106,12 @@ function generateStaticData(type, numPoints) {
     }
 }
 
+
 // --- Initialization ---
 function initializePlots() {
     let plotsInitializedCount = 0; // Counter
 
     PLOT_CONFIGS.forEach(config => {
-        // ... (wrapper, title, canvas creation remains the same) ...
         const wrapper = document.createElement('div');
         wrapper.className = 'plot-wrapper';
         const title = document.createElement('h3');
@@ -123,14 +125,13 @@ function initializePlots() {
 
         const devicePixelRatio = window.devicePixelRatio || 1;
 
-        // Use requestAnimationFrame to ensure dimensions are available
         requestAnimationFrame(() => {
             canvas.width = canvas.clientWidth * devicePixelRatio;
             canvas.height = canvas.clientHeight * devicePixelRatio;
 
             if (canvas.width === 0 || canvas.height === 0) {
                 console.warn(`Canvas ${config.id} has zero dimensions. Plotting might fail.`);
-                 plotsInitializedCount++; // Increment even on failure to avoid hang
+                plotsInitializedCount++;
                 if (plotsInitializedCount === PLOT_CONFIGS.length) {
                     startAnimationLoopIfReady();
                 }
@@ -138,20 +139,28 @@ function initializePlots() {
             }
 
             const wglp = new WebglPlot(canvas);
-            plots[config.id] = wglp; // Store the plot instance
 
-            let plotMinY = Infinity; // Initialize min Y for this plot
-            let plotMaxY = -Infinity; // Initialize max Y for this plot
+            // --- Create the Zoom Rectangle Line ---
+            const zoomRectLine = new WebglLine(new ColorRGBA(0.9, 0.9, 0.9, 0.7), 4); // Semi-transparent white
+            zoomRectLine.loop = true; // Make it a closed loop
+            zoomRectLine.xy = new Float32Array(8).fill(0); // Initialize with zeros (8 values for 4 xy pairs)
+            zoomRectLine.visible = false; // Start hidden
+            wglp.addLine(zoomRectLine); // Add it to the plot
+
+            // --- Store instances ---
+            plots[config.id] = { wglp, zoomRectLine }; // Store both
+
+            let plotMinY = Infinity;
+            let plotMaxY = -Infinity;
 
             config.metrics.forEach(metric => {
                 const staticYData = generateStaticData(metric.type, NUM_POINTS_STATIC);
                 const line = new WebglLine(metric.color, NUM_POINTS_STATIC);
-                line.arrangeX(); // X values are -1 to 1
+                line.arrangeX();
                 for (let i = 0; i < NUM_POINTS_STATIC; i++) {
-                    const y = staticYData[i]; // Get y value
+                    const y = staticYData[i];
                     line.setY(i, y);
-                    // Track min/max across all lines in this plot
-                    if (isFinite(y)) { // Ensure we only consider valid numbers
+                    if (isFinite(y)) {
                         plotMinY = Math.min(plotMinY, y);
                         plotMaxY = Math.max(plotMaxY, y);
                     }
@@ -159,62 +168,56 @@ function initializePlots() {
                 wglp.addLine(line);
             });
 
-            // --- Calculate and set Y-axis scale and offset ---
-            // Check if we found valid min/max values
+            // Calculate and set initial Y-axis scale/offset
+            // ... (calculation code remains the same as previous version)
             if (isFinite(plotMinY) && isFinite(plotMaxY)) {
                  const dataRangeY = plotMaxY - plotMinY;
-                 const padding = dataRangeY === 0 ? 0.1 : dataRangeY * 0.1; // Add 10% padding, handle constant data
-
+                 const padding = dataRangeY === 0 ? 0.1 : dataRangeY * 0.1;
                  const finalMinY = plotMinY - padding;
                  const finalMaxY = plotMaxY + padding;
                  const finalRangeY = finalMaxY - finalMinY;
-
-                 if (finalRangeY > 1e-9) { // Avoid division by zero or extremely small range
-                     // Calculate scale: map final data range [finalMinY, finalMaxY] to WebGL range [-1, 1]
-                     // WebGL_Y = Data_Y * gScaleY + gOffsetY
-                     // 1 = finalMaxY * gScaleY + gOffsetY
-                     // -1 = finalMinY * gScaleY + gOffsetY
-                     // Subtracting: 2 = (finalMaxY - finalMinY) * gScaleY  => gScaleY = 2 / finalRangeY
+                 if (finalRangeY > 1e-9) {
                      wglp.gScaleY = 2 / finalRangeY;
-                     // Calculate offset: gOffsetY = -1 - finalMinY * gScaleY
                      wglp.gOffsetY = -1 - finalMinY * wglp.gScaleY;
                  } else {
-                     // Handle constant data or very small range: Center the value
-                     wglp.gScaleY = 1; // Use a default scale
-                     wglp.gOffsetY = -plotMinY; // Center the constant value (approx)
+                     wglp.gScaleY = 1;
+                     wglp.gOffsetY = -plotMinY;
                  }
             } else {
-                 // Default if no valid data found (e.g., all NaN or +/-Infinity)
                  wglp.gScaleY = 1.0;
                  wglp.gOffsetY = 0.0;
             }
-
-            // Set initial X scale to show all data (-1 to 1 maps to viewport width)
             wglp.gScaleX = 1.0;
             wglp.gOffsetX = 0.0;
 
             // --- Interaction Logic for *this* canvas/wglp ---
-            // (Keep the previously added interaction listeners here)
-            // ... existing listeners for dblclick, mousedown, mousemove, etc. ...
             let isDragging = false;
             let isZoomingRect = false;
             let dragStartX = 0;
             let dragStartY = 0;
             let plotOffsetXOld = 0;
             let plotOffsetYOld = 0;
-            let zoomRectStartX = 0;
-            let zoomRectStartY = 0;
-            let currentScale = 1; // Reset for each plot
+            let zoomRectStartX = 0; // In NDC coords
+            let zoomRectStartY = 0; // In NDC coords
+
+            // --- Helper: Convert NDC to Plot Coordinates ---
+            // (Reverses the transformation applied by webgl-plot)
+            const ndcToPlotCoords = (ndcX, ndcY) => {
+                // Avoid division by zero if scale is somehow zero
+                const plotX = wglp.gScaleX === 0 ? 0 : (ndcX - wglp.gOffsetX) / wglp.gScaleX;
+                const plotY = wglp.gScaleY === 0 ? 0 : (ndcY - wglp.gOffsetY) / wglp.gScaleY;
+                return { x: plotX, y: plotY };
+            };
 
             // Prevent default context menu
             canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-            // Double Click: Reset View (Reset scale/offset to calculated initial values)
-            canvas.addEventListener('dblclick', (e) => {
+            // Double Click: Reset View
+             canvas.addEventListener('dblclick', (e) => {
                 e.preventDefault();
-
-                // Recalculate initial Y scale/offset based on data
-                 if (isFinite(plotMinY) && isFinite(plotMaxY)) {
+                // Reset Y scale/offset
+                if (isFinite(plotMinY) && isFinite(plotMaxY)) {
+                   // ... (same Y reset logic as before)
                     const dataRangeY = plotMaxY - plotMinY;
                     const padding = dataRangeY === 0 ? 0.1 : dataRangeY * 0.1;
                     const finalMinY = plotMinY - padding;
@@ -234,27 +237,37 @@ function initializePlots() {
                 // Reset X scale/offset
                 wglp.gScaleX = 1.0;
                 wglp.gOffsetX = 0.0;
-
-                // Reset internal scale tracker if you use it elsewhere
-                currentScale = 1.0;
+                // Hide zoom rectangle if it was somehow visible
+                zoomRectLine.visible = false;
             });
 
             // Mouse Down: Start Pan or Zoom Rect
             canvas.addEventListener('mousedown', (e) => {
                 e.preventDefault();
-                 // Need to store the scale *before* the zoom operation starts
-                const plotScaleXOld = wglp.gScaleX;
-                const plotScaleYOld = wglp.gScaleY;
-
-                if (e.button === 0) { // Left click (intended for zoom rect)
+                if (e.button === 0) { // Left click: Start Zoom Rect
                     isZoomingRect = true;
                     isDragging = false;
+                    // Store start NDC coordinates
                     zoomRectStartX = (2 * (e.offsetX * devicePixelRatio - canvas.width / 2)) / canvas.width;
-                    zoomRectStartY = (-2 * (e.offsetY * devicePixelRatio - canvas.height / 2)) / canvas.height;
+                    zoomRectStartY = (-2 * (e.offsetY * devicePixelRatio - canvas.height / 2)) / canvas.height; // Y is inverted
+
+                    // Convert start NDC to plot coords for the rectangle line
+                    const startPlotCoords = ndcToPlotCoords(zoomRectStartX, zoomRectStartY);
+
+                    // Initialize rectangle to a single point at the start
+                    zoomRectLine.xy = new Float32Array([
+                        startPlotCoords.x, startPlotCoords.y,
+                        startPlotCoords.x, startPlotCoords.y,
+                        startPlotCoords.x, startPlotCoords.y,
+                        startPlotCoords.x, startPlotCoords.y,
+                    ]);
+                    zoomRectLine.visible = true; // Make it visible
                     canvas.style.cursor = 'crosshair';
+
                 } else if (e.button === 2) { // Right click: Pan Start
                     isDragging = true;
-                    isZoomingRect = false;
+                    isZoomingRect = false; // Ensure zoom rect stops if right click interrupts
+                    zoomRectLine.visible = false; // Hide rect if panning starts
                     dragStartX = e.clientX * devicePixelRatio;
                     dragStartY = e.clientY * devicePixelRatio;
                     plotOffsetXOld = wglp.gOffsetX;
@@ -263,27 +276,46 @@ function initializePlots() {
                 }
             });
 
-             // Mouse Move: Handle Dragging or Zoom Rect Update
+            // Mouse Move: Handle Dragging or Update Zoom Rect
             canvas.addEventListener('mousemove', (e) => {
                 e.preventDefault();
                 if (isDragging) {
+                    // ... (panning logic remains the same)
                     const moveX = e.clientX * devicePixelRatio - dragStartX;
                     const moveY = e.clientY * devicePixelRatio - dragStartY;
                     const deltaX = (moveX / canvas.width) * 2 / wglp.gScaleX;
                     const deltaY = (-moveY / canvas.height) * 2 / wglp.gScaleY;
                     wglp.gOffsetX = plotOffsetXOld + deltaX;
                     wglp.gOffsetY = plotOffsetYOld + deltaY;
+
                 } else if (isZoomingRect) {
-                    canvas.style.cursor = 'crosshair';
-                    // Can add visual rectangle drawing here later if needed
+                    // Get current NDC coordinates
+                    const currentNdcX = (2 * (e.offsetX * devicePixelRatio - canvas.width / 2)) / canvas.width;
+                    const currentNdcY = (-2 * (e.offsetY * devicePixelRatio - canvas.height / 2)) / canvas.height;
+
+                    // Convert start and current NDC to Plot Coordinates
+                    const startPlot = ndcToPlotCoords(zoomRectStartX, zoomRectStartY);
+                    const currentPlot = ndcToPlotCoords(currentNdcX, currentNdcY);
+
+                    // Update the zoom rectangle line's vertices
+                    // Order: Bottom-Left -> Bottom-Right -> Top-Right -> Top-Left (relative to screen)
+                    zoomRectLine.xy = new Float32Array([
+                        startPlot.x, startPlot.y,   // Corner 1 (start point)
+                        currentPlot.x, startPlot.y, // Corner 2
+                        currentPlot.x, currentPlot.y, // Corner 3 (current point)
+                        startPlot.x, currentPlot.y    // Corner 4
+                    ]);
+                    canvas.style.cursor = 'crosshair'; // Keep cursor
                 } else {
-                     canvas.style.cursor = 'grab';
+                     canvas.style.cursor = 'grab'; // Default cursor
                 }
             });
 
             // Mouse Up: End Pan or Execute Zoom Rect
             canvas.addEventListener('mouseup', (e) => {
                 e.preventDefault();
+                 zoomRectLine.visible = false; // Always hide rect on mouseup
+
                 if (isDragging) {
                     isDragging = false;
                     canvas.style.cursor = 'grab';
@@ -294,21 +326,18 @@ function initializePlots() {
                     const zoomRectEndX = (2 * (e.offsetX * devicePixelRatio - canvas.width / 2)) / canvas.width;
                     const zoomRectEndY = (-2 * (e.offsetY * devicePixelRatio - canvas.height / 2)) / canvas.height;
 
-                     // Get scale *before* zoom changes, stored on mousedown
-                    // Note: We need plotScaleXOld and plotScaleYOld from mousedown scope
-                    // This requires restructuring or passing these values.
-                    // Simpler approach: access wglp.gScaleX/Y *before* modification below.
+                    // Use the STARTING NDC coords (zoomRectStartX/Y) and ENDING NDC coords (zoomRectEndX/Y)
+                    // Get scale *before* zoom changes
                     const scaleXBeforeZoom = wglp.gScaleX;
                     const scaleYBeforeZoom = wglp.gScaleY;
 
-
-                    // Convert NDC rect coordinates to the plot's internal coordinate system
+                    // Convert NDC rect corners to the plot's internal coordinate system
                     const startPlotX = (zoomRectStartX - wglp.gOffsetX) / scaleXBeforeZoom;
                     const endPlotX = (zoomRectEndX - wglp.gOffsetX) / scaleXBeforeZoom;
                     const startPlotY = (zoomRectStartY - wglp.gOffsetY) / scaleYBeforeZoom;
                     const endPlotY = (zoomRectEndY - wglp.gOffsetY) / scaleYBeforeZoom;
 
-
+                    // --- Zoom Calculation (remains the same) ---
                     const minPlotX = Math.min(startPlotX, endPlotX);
                     const maxPlotX = Math.max(startPlotX, endPlotX);
                     const minPlotY = Math.min(startPlotY, endPlotY);
@@ -316,39 +345,40 @@ function initializePlots() {
 
                     const centerX = (minPlotX + maxPlotX) / 2;
                     const centerY = (minPlotY + maxPlotY) / 2;
-                    const rangeX = Math.abs(maxPlotX - minPlotX); // Use abs just in case
+                    const rangeX = Math.abs(maxPlotX - minPlotX);
                     const rangeY = Math.abs(maxPlotY - minPlotY);
 
-                    if (rangeX > 1e-9 && rangeY > 1e-9) {
-                        // New scale maps the selected range (rangeX/Y) to the full view (2)
-                        wglp.gScaleX = 2 / rangeX;
-                        wglp.gScaleY = 2 / rangeY;
-
-                        // New offset centers the selected area (centerX/Y) in the view
-                        wglp.gOffsetX = -centerX * wglp.gScaleX;
-                        wglp.gOffsetY = -centerY * wglp.gScaleY;
-
-                        // Update internal scale tracker based on X zoom approx
-                        currentScale *= (wglp.gScaleX / scaleXBeforeZoom);
-                        currentScale = Math.max(0.1, currentScale); // Clamp minimum scale
+                    // Check for minimal drag distance to prevent tiny zooms
+                    const minDragThresholdNDC = 0.02; // Adjust as needed (NDC units)
+                    if (Math.abs(zoomRectEndX - zoomRectStartX) > minDragThresholdNDC ||
+                        Math.abs(zoomRectEndY - zoomRectStartY) > minDragThresholdNDC)
+                    {
+                        if (rangeX > 1e-9 && rangeY > 1e-9) {
+                            wglp.gScaleX = 2 / rangeX;
+                            wglp.gScaleY = 2 / rangeY;
+                            wglp.gOffsetX = -centerX * wglp.gScaleX;
+                            wglp.gOffsetY = -centerY * wglp.gScaleY;
+                        }
                     }
-                     // Prevent accidental tiny zooms from locking up view
+                    // Clamp scale regardless
                     wglp.gScaleX = Math.max(0.01, wglp.gScaleX);
                     wglp.gScaleY = Math.max(0.01, wglp.gScaleY);
                 }
             });
 
-             // Mouse Leave: Ensure dragging/zooming stops if mouse leaves canvas
+             // Mouse Leave: Ensure dragging/zooming stops and hide rectangle
             canvas.addEventListener('mouseleave', (e) => {
                  if (isDragging || isZoomingRect) {
                      isDragging = false;
                      isZoomingRect = false;
+                     zoomRectLine.visible = false; // Hide rect on leave
                      canvas.style.cursor = 'grab';
                  }
             });
 
-            // Wheel: Zoom in/out (centered on cursor)
+            // Wheel: Zoom in/out
             canvas.addEventListener('wheel', (e) => {
+                // ... (wheel logic remains the same)
                 e.preventDefault();
                 const zoomFactor = 1.1;
                 const scaleDelta = e.deltaY < 0 ? zoomFactor : 1 / zoomFactor;
@@ -359,41 +389,36 @@ function initializePlots() {
 
                 wglp.gScaleX *= scaleDelta;
                 wglp.gScaleY *= scaleDelta;
-                wglp.gScaleX = Math.max(0.01, wglp.gScaleX); // Prevent excessive zoom out/in
+                wglp.gScaleX = Math.max(0.01, wglp.gScaleX);
                 wglp.gScaleY = Math.max(0.01, wglp.gScaleY);
 
                 wglp.gOffsetX = cursorNDC_X + (wglp.gOffsetX - cursorNDC_X) * (wglp.gScaleX / gScaleXOld);
                 wglp.gOffsetY = cursorNDC_Y + (wglp.gOffsetY - cursorNDC_Y) * (wglp.gScaleY / gScaleYOld);
-
-                currentScale *= scaleDelta;
-                currentScale = Math.max(0.1, currentScale);
             });
 
             // --- Touch Events ---
-             // (Touch event listeners remain the same as previous correction)
-             // ... touchstart, touchmove, touchend ...
-             let touchStartX0 = 0, touchStartY0 = 0;
-             let touchStartX1 = 0, touchStartY1 = 0;
-             let initialTouchDistance = 0;
-             let isPinching = false;
-             let isTouchPannning = false;
-             let touchPanStartX = 0, touchPanStartY = 0;
-             // Important: Need to store offset state for touch panning correctly
-             let touchPlotOffsetXOld = 0;
-             let touchPlotOffsetYOld = 0;
+            // ... (Touch logic remains the same, ensure zoomRectLine.visible = false in touchstart/touchend if needed)
+            let touchStartX0 = 0, touchStartY0 = 0;
+            let touchStartX1 = 0, touchStartY1 = 0;
+            let initialTouchDistance = 0;
+            let isPinching = false;
+            let isTouchPannning = false;
+            let touchPanStartX = 0, touchPanStartY = 0;
+            let touchPlotOffsetXOld = 0;
+            let touchPlotOffsetYOld = 0;
 
              canvas.addEventListener('touchstart', (e) => {
                  e.preventDefault();
-                 if (e.touches.length === 1) { // Start Pan
+                 zoomRectLine.visible = false; // Hide rect if touch starts
+                 if (e.touches.length === 1) {
                       isTouchPannning = true;
                       isPinching = false;
                       const touch = e.touches[0];
                       touchPanStartX = touch.clientX * devicePixelRatio;
                       touchPanStartY = touch.clientY * devicePixelRatio;
-                      // Store offset at the START of touch pan
                       touchPlotOffsetXOld = wglp.gOffsetX;
                       touchPlotOffsetYOld = wglp.gOffsetY;
-                 } else if (e.touches.length === 2) { // Start Pinch
+                 } else if (e.touches.length === 2) {
                       isPinching = true;
                       isTouchPannning = false;
                       const touch0 = e.touches[0];
@@ -403,7 +428,6 @@ function initializePlots() {
                       touchStartX1 = touch1.clientX * devicePixelRatio;
                       touchStartY1 = touch1.clientY * devicePixelRatio;
                       initialTouchDistance = Math.hypot(touchStartX1 - touchStartX0, touchStartY1 - touchStartY0);
-                      // Store offset at the START of pinch
                       touchPlotOffsetXOld = wglp.gOffsetX;
                       touchPlotOffsetYOld = wglp.gOffsetY;
                  }
@@ -411,72 +435,60 @@ function initializePlots() {
 
              canvas.addEventListener('touchmove', (e) => {
                  e.preventDefault();
-                 if (isTouchPannning && e.touches.length === 1) { // Pan Move
-                     const touch = e.touches[0];
-                     const moveX = touch.clientX * devicePixelRatio - touchPanStartX;
-                     const moveY = touch.clientY * devicePixelRatio - touchPanStartY;
-                     // Calculate delta relative to current scale
-                     const deltaX = (moveX / canvas.width) * 2 / wglp.gScaleX;
-                     const deltaY = (-moveY / canvas.height) * 2 / wglp.gScaleY;
-                     // Apply delta to the offset stored at the beginning of the pan
-                     wglp.gOffsetX = touchPlotOffsetXOld + deltaX;
-                     wglp.gOffsetY = touchPlotOffsetYOld + deltaY;
+                 if (isTouchPannning && e.touches.length === 1) {
+                     // ... pan move logic ...
+                    const touch = e.touches[0];
+                    const moveX = touch.clientX * devicePixelRatio - touchPanStartX;
+                    const moveY = touch.clientY * devicePixelRatio - touchPanStartY;
+                    const deltaX = (moveX / canvas.width) * 2 / wglp.gScaleX;
+                    const deltaY = (-moveY / canvas.height) * 2 / wglp.gScaleY;
+                    wglp.gOffsetX = touchPlotOffsetXOld + deltaX;
+                    wglp.gOffsetY = touchPlotOffsetYOld + deltaY;
+                 } else if (isPinching && e.touches.length === 2) {
+                     // ... pinch move logic ...
+                    const touch0 = e.touches[0];
+                    const touch1 = e.touches[1];
+                    const currentX0 = touch0.clientX * devicePixelRatio;
+                    const currentY0 = touch0.clientY * devicePixelRatio;
+                    const currentX1 = touch1.clientX * devicePixelRatio;
+                    const currentY1 = touch1.clientY * devicePixelRatio;
+                    const currentTouchDistance = Math.hypot(currentX1 - currentX0, currentY1 - currentY0);
+                    const currentCenterX = (currentX0 + currentX1) / 2;
+                    const currentCenterY = (currentY0 + currentY1) / 2;
 
-                 } else if (isPinching && e.touches.length === 2) { // Pinch Move
-                      const touch0 = e.touches[0];
-                      const touch1 = e.touches[1];
-                      const currentX0 = touch0.clientX * devicePixelRatio;
-                      const currentY0 = touch0.clientY * devicePixelRatio;
-                      const currentX1 = touch1.clientX * devicePixelRatio;
-                      const currentY1 = touch1.clientY * devicePixelRatio;
-                      const currentTouchDistance = Math.hypot(currentX1 - currentX0, currentY1 - currentY0);
-                      const currentCenterX = (currentX0 + currentX1) / 2;
-                      const currentCenterY = (currentY0 + currentY1) / 2;
+                    if (initialTouchDistance > 1e-6) {
+                        const scaleDelta = currentTouchDistance / initialTouchDistance;
+                        const centerNDC_X = (2 * (currentCenterX - canvas.width / 2)) / canvas.width;
+                        const centerNDC_Y = (-2 * (currentCenterY - canvas.height / 2)) / canvas.height;
+                        const gScaleXOld = wglp.gScaleX;
+                        const gScaleYOld = wglp.gScaleY;
+                        let newScaleX = gScaleXOld * scaleDelta;
+                        let newScaleY = gScaleYOld * scaleDelta;
+                        newScaleX = Math.max(0.01, newScaleX);
+                        newScaleY = Math.max(0.01, newScaleY);
 
-                      if (initialTouchDistance > 1e-6) {
-                          const scaleDelta = currentTouchDistance / initialTouchDistance;
-                          const centerNDC_X = (2 * (currentCenterX - canvas.width / 2)) / canvas.width;
-                          const centerNDC_Y = (-2 * (currentCenterY - canvas.height / 2)) / canvas.height;
+                        // Adjust offset based on STARTING offset
+                        wglp.gOffsetX = centerNDC_X + (touchPlotOffsetXOld - centerNDC_X) * (newScaleX / gScaleXOld);
+                        wglp.gOffsetY = centerNDC_Y + (touchPlotOffsetYOld - centerNDC_Y) * (newScaleY / gScaleYOld);
+                        wglp.gScaleX = newScaleX;
+                        wglp.gScaleY = newScaleY;
 
-                           const gScaleXOld = wglp.gScaleX;
-                           const gScaleYOld = wglp.gScaleY;
-
-                           // Calculate new scale based on the STARTING scale * delta
-                           let newScaleX = gScaleXOld * scaleDelta;
-                           let newScaleY = gScaleYOld * scaleDelta;
-                           newScaleX = Math.max(0.01, newScaleX); // Clamp
-                           newScaleY = Math.max(0.01, newScaleY); // Clamp
-
-                           // Adjust offset based on the offset at START of pinch
-                           wglp.gOffsetX = centerNDC_X + (touchPlotOffsetXOld - centerNDC_X) * (newScaleX / gScaleXOld);
-                           wglp.gOffsetY = centerNDC_Y + (touchPlotOffsetYOld - centerNDC_Y) * (newScaleY / gScaleYOld);
-
-                           // Apply the new scale *after* calculating offset
-                           wglp.gScaleX = newScaleX;
-                           wglp.gScaleY = newScaleY;
-
-                           // Update distance for next move calculation (relative change)
-                           initialTouchDistance = currentTouchDistance;
-                           // Update reference STARTING offset based on current state for next move delta calculation
-                           touchPlotOffsetXOld = wglp.gOffsetX;
-                           touchPlotOffsetYOld = wglp.gOffsetY;
-
-                      }
+                        initialTouchDistance = currentTouchDistance;
+                        touchPlotOffsetXOld = wglp.gOffsetX; // Update reference offset for next move delta
+                        touchPlotOffsetYOld = wglp.gOffsetY;
+                    }
                  }
              }, { passive: false });
 
              canvas.addEventListener('touchend', (e) => {
                   e.preventDefault();
-                  if (e.touches.length < 2) {
-                      isPinching = false;
-                  }
-                  if (e.touches.length < 1) {
-                      isTouchPannning = false;
-                  }
+                   zoomRectLine.visible = false; // Ensure hidden
+                  if (e.touches.length < 2) { isPinching = false; }
+                  if (e.touches.length < 1) { isTouchPannning = false; }
              }, { passive: false });
 
 
-            // Increment counter and check if all plots are done
+            // Increment counter
             plotsInitializedCount++;
             if (plotsInitializedCount === PLOT_CONFIGS.length) {
                 startAnimationLoopIfReady();
@@ -485,41 +497,44 @@ function initializePlots() {
     });
 }
 
-let animationFrameId = null; // To store the request ID
+let animationFrameId = null;
 
 // --- Function to start the animation loop ---
 function startAnimationLoopIfReady() {
-     // Check if loop is already running and if all plots are potentially initialized
-    if (animationFrameId === null && Object.keys(plots).length > 0) {
-         console.log("All plots initialized (or failed), starting animation loop.");
+    if (animationFrameId === null && (Object.keys(plots).length > 0 || plotsInitializedCount === PLOT_CONFIGS.length) ) {
+         console.log("Initialization complete or attempted, starting animation loop.");
          animationFrameId = requestAnimationFrame(updateDashboard);
     } else if (Object.keys(plots).length === 0 && plotsInitializedCount === PLOT_CONFIGS.length){
          console.warn("No plots were successfully initialized.");
     }
 }
 
-// --- Animation Loop (Updates plot transformations) ---
+// --- Animation Loop ---
 function updateDashboard() {
+    // Loop through all initialized plots and call update
     for (const plotId in plots) {
-        const wglp = plots[plotId];
-        if (wglp) {
-            wglp.update(); // Apply zoom/pan and redraw
+        const plotData = plots[plotId];
+        if (plotData && plotData.wglp) { // Check if plot instance exists
+             plotData.wglp.update(); // This now also draws the zoomRectLine if visible
         }
     }
     animationFrameId = requestAnimationFrame(updateDashboard); // Continue the loop
 }
 
-// --- Resize Handling (Seems mostly correct) ---
+// --- Resize Handling ---
 window.addEventListener('resize', () => {
+    // ... (resize logic remains the same)
     clearTimeout(window.resizeTimeout);
     window.resizeTimeout = setTimeout(() => {
         console.log("Resizing plots...");
-        const devicePixelRatio = window.devicePixelRatio || 1; // Get it once
+        const devicePixelRatio = window.devicePixelRatio || 1;
 
         for (const plotId in plots) {
-            const wglp = plots[plotId];
-            if (!wglp) continue;
-            const canvas = wglp.canvas; // Get canvas from wglp instance
+            const plotData = plots[plotId];
+            if (!plotData || !plotData.wglp) continue;
+
+            const wglp = plotData.wglp;
+            const canvas = wglp.canvas;
             if (!canvas) continue;
 
             const newWidth = canvas.clientWidth;
@@ -529,11 +544,9 @@ window.addEventListener('resize', () => {
                 const targetWidth = Math.round(newWidth * devicePixelRatio);
                 const targetHeight = Math.round(newHeight * devicePixelRatio);
 
-                // Only resize if needed to avoid unnecessary texture reallocations
                 if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
                     canvas.width = targetWidth;
                     canvas.height = targetHeight;
-                    // Update the WebGL viewport to match the new canvas dimensions
                     wglp.viewport(0, 0, canvas.width, canvas.height);
                     console.log(`Resized ${plotId} to ${canvas.width}x${canvas.height}`);
                 }
@@ -541,9 +554,9 @@ window.addEventListener('resize', () => {
                 console.warn(`Canvas ${plotId} client dimensions are zero during resize.`);
             }
         }
-        // No explicit wglp.update() needed here, animation loop handles it.
-    }, 250); // Debounce resize event
+    }, 250);
 });
+
 
 // --- Start Initialization ---
 initializePlots();
