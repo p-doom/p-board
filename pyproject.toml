@@ -5,10 +5,10 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "p_board"
 version = "0.1.0"
-description = "A simple TensorBoard log viewer focused on performance plots."
-readme = "README.md" # Optional: if you have one
+description = "TensorBoard, but it does not suck."
+readme = "README.md"
 requires-python = ">=3.8"
-license = { text = "MIT" } # Or choose another license
+license = { text = "MIT" }
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -18,22 +18,20 @@ classifiers = [
 ]
 dependencies = [
     "Flask>=2.0",
-    "tbparse>=0.0.9", # Or the version you were using
-    "pandas>=1.0",    # tbparse dependency
-    # Add any other direct dependencies your backend might have
+    "tbparse>=0.0.9",
+    "pandas>=1.0",
 ]
 
-[project.urls] # Optional
-"Homepage" = "https://github.com/yourusername/p-board" # Example URL
-"Bug Tracker" = "https://github.com/yourusername/p-board/issues" # Example URL
+[project.urls]
+"Homepage" = "https://github.com/p-doom/p-board"
+"Bug Tracker" = "https://github.com/p-doom/p-board/issues"
 
-# --- This is the crucial part for the command-line script ---
+
 [project.scripts]
 p-board = "p_board.backend:main"
 
-# Optional: Include frontend files in the built package
 [tool.setuptools.packages.find]
-where = ["."] # Look for packages in the current directory
+where = ["."]
 
 [tool.setuptools.package-data]
 p_board = ["frontend/*"]
