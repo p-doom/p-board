@@ -1,4 +1,4 @@
-/* style.css - Overhauled for Dev Tool Look */
+/* style.css - Overhauled for Sleek Dev Tool Look */
 
 :root {
     /* Color Palette (Inspired by modern dark themes) */
@@ -8,13 +8,14 @@
     --bg-light: #2c3138;       /* Hover states, subtle elements */
     --border-color: #353a41;     /* Borders */
     --text-primary: #d1d1d1;   /* Primary text */
-    --text-secondary: #b0b5bb; /* Lighter secondary text for better contrast */
-    --text-placeholder: #7a8087; /* Adjusted placeholder */
-    --accent-primary: #3e92cc; /* Primary accent (blue) */
-    --accent-secondary: #68b3e9; /* Lighter accent / hover */
-    --accent-primary-rgb: 62, 146, 204; /* NEW: RGB for accent */
+    --text-secondary: #9fa6b0; /* Slightly softer secondary */
+    --text-placeholder: #7a8087; /* Placeholder text */
+    --accent-primary: #4a90e2; /* Primary accent (softer blue) */
+    --accent-secondary: #6cb0f2; /* Lighter accent / hover */
+    --accent-primary-rgb: 74, 144, 226; /* RGB for accent */
     --error-color: #e55353;
     --error-bg: rgba(229, 83, 83, 0.1);
+    --success-color: #52c41a;
 
     /* Typography */
     --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
@@ -22,39 +23,35 @@
     --font-size-small: 12px;
     --font-size-medium: 16px;
     --font-size-large: 18px;
-    --line-height-base: 1.6;
+    --line-height-base: 1.5; /* Slightly tighter */
 
     /* Spacing */
     --spacing-xs: 4px;
     --spacing-sm: 8px;
-    --spacing-md: 16px;
-    --spacing-lg: 24px;
-    --spacing-xl: 32px;
+    --spacing-md: 12px; /* Reduced base spacing */
+    --spacing-lg: 18px;
+    --spacing-xl: 24px;
 
     /* Borders & Shadows */
-    --border-radius: 6px;
-    --box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-
-    /* Transitions */
-    --transition-fast: 0.15s ease-out;
-    --transition-medium: 0.25s ease-out;
+    --border-radius: 5px; /* Slightly smaller radius */
+    --box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0,0,0,0.15); /* Softer shadow */
+    --focus-ring-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.3);
 
     /* Layout */
-    --sidebar-width: 280px;
-    --resizer-width: 5px; /* Width of the draggable area */
-    --sidebar-min-width: 200px; /* Minimum sidebar width */
-    --sidebar-max-width: 600px; /* Maximum sidebar width */
-    /* --- NEW: Collapsed state variables --- */
-    --sidebar-collapsed-width: 0px; /* Collapsed width */
-    --resizer-collapsed-width: 0px; /* Hide resizer when collapsed */
+    --sidebar-width: 260px;   /* Default width */
+    --resizer-width: 5px;     /* Width of the draggable area */
+    --sidebar-min-width: 200px;
+    --sidebar-max-width: 600px;
+    --sidebar-collapsed-width: 0px;
+    --resizer-collapsed-width: 0px;
     --reopen-button-width: 30px;
-    --reopen-button-offset: 5px; /* How far from the edge */
+    --reopen-button-offset: 8px;
 
-    --plot-yaxis-width: 65px; /* Slightly wider Y axis */
-    --plot-xaxis-height: 35px; /* Slightly taller X axis */
-    --axis-border-color: #40454d; /* Slightly lighter border */
-    --axis-text-color: var(--text-secondary); /* Use the updated secondary color */
-    --axis-font: 25px var(--font-family); /* Increased font size */
+    --plot-yaxis-width: 60px; /* Slightly narrower */
+    --plot-xaxis-height: 30px;/* Slightly shorter */
+    --axis-border-color: var(--border-color); /* Use standard border */
+    --axis-text-color: var(--text-secondary);
+    --axis-font: 24px var(--font-family); /* Defined for JS */
 }
 
 /* Basic Reset */
@@ -66,30 +63,53 @@
 
 html {
     font-size: var(--font-size-base);
-    background-color: var(--bg-deep-dark); /* Set on html for full background */
+    background-color: var(--bg-deep-dark);
 }
 
 body {
     font-family: var(--font-family);
     color: var(--text-primary);
     line-height: var(--line-height-base);
-    height: 100vh; /* Full viewport height */
-    overflow: hidden; /* Prevent body scroll */
+    height: 100vh;
+    overflow: hidden;
+    background-color: var(--bg-dark); /* Body bg */
 }
 
 h1, h2, h3, h4, h5, h6 {
     line-height: 1.3;
-    font-weight: 500;
+    font-weight: 500; /* Slightly lighter headings */
 }
 
 a {
     color: var(--accent-primary);
     text-decoration: none;
-    transition: color var(--transition-fast);
 }
 a:hover, a:focus {
     color: var(--accent-secondary);
     text-decoration: underline;
+}
+
+button, input[type="button"], input[type="submit"], input[type="reset"] {
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-light);
+    color: var(--text-primary);
+}
+button:hover, input[type="button"]:hover, input[type="submit"]:hover, input[type="reset"]:hover {
+    background-color: hsl(from var(--bg-light) h s calc(l + 5%));
+    border-color: hsl(from var(--border-color) h s calc(l + 5%));
+}
+button:active, input[type="button"]:active, input[type="submit"]:active, input[type="reset"]:active {
+    background-color: hsl(from var(--bg-light) h s calc(l - 3%));
+}
+button:focus-visible, input[type="button"]:focus-visible, input[type="submit"]:focus-visible, input[type="reset"]:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring-shadow);
+    border-color: var(--accent-primary);
 }
 
 /* Main Application Layout */
@@ -97,16 +117,14 @@ a:hover, a:focus {
     display: grid;
     grid-template-columns: var(--sidebar-width) var(--resizer-width) 1fr;
     height: 100vh;
-    transition: grid-template-columns var(--transition-medium);
-    position: relative; /* Needed for absolute positioning of reopen btn */
+    position: relative;
 }
 
 /* Sidebar Styling */
 #sidebar {
-    /* ... (keep existing sidebar styles) ... */
     background-color: var(--bg-medium);
     border-right: 1px solid var(--border-color);
-    padding: var(--spacing-lg) var(--spacing-md);
+    padding: var(--spacing-lg);
     display: flex;
     flex-direction: column;
     overflow-y: auto;
@@ -115,35 +133,34 @@ a:hover, a:focus {
     min-width: var(--sidebar-min-width);
     max-width: var(--sidebar-max-width);
     width: var(--sidebar-width);
-    transition: width var(--transition-medium),
-                min-width var(--transition-medium),
-                padding var(--transition-medium),
-                border var(--transition-medium),
-                opacity var(--transition-medium);
     opacity: 1;
-    z-index: 10; /* Ensure sidebar is above reopen button if needed */
+    z-index: 10;
 }
 
+/* Resizer */
 #resizer {
-    /* ... (keep existing resizer styles) ... */
     grid-column: 2 / 3;
     cursor: col-resize;
     background-color: var(--border-color);
     height: 100%;
     width: var(--resizer-width);
-    transition: background-color var(--transition-fast),
-                width var(--transition-medium),
-                opacity var(--transition-medium);
     opacity: 1;
-    user-select: none;
-    z-index: 10; /* Ensure resizer is above reopen button */
+    user-select: none; /* Prevent text selection during drag */
+    z-index: 10;
 }
 #resizer:hover {
      background-color: var(--accent-secondary);
 }
+body.resizing #resizer { /* Style when actively resizing */
+    background-color: var(--accent-primary);
+}
+body.resizing { /* Prevent text selection globally during resize */
+    cursor: col-resize;
+    user-select: none;
+}
+
 
 .sidebar-header {
-    /* ... (keep existing header styles) ... */
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -152,16 +169,17 @@ a:hover, a:focus {
     border-bottom: 1px solid var(--border-color);
     flex-shrink: 0;
 }
-.sidebar-header h2 { /* Keep */
+.sidebar-header h2 {
     font-size: var(--font-size-large);
     font-weight: 600;
     color: var(--text-primary);
     margin: 0;
     white-space: nowrap;
+    flex-grow: 1; /* Take available space */
 }
-#sidebar-toggle-btn { /* Keep */
+#sidebar-toggle-btn {
     background: none;
-    border: 1px solid transparent;
+    border: none;
     color: var(--text-secondary);
     font-size: var(--font-size-large);
     font-weight: bold;
@@ -169,23 +187,32 @@ a:hover, a:focus {
     padding: 0 var(--spacing-sm);
     line-height: 1;
     border-radius: var(--border-radius);
-    transition: background-color var(--transition-fast), color var(--transition-fast);
     margin-left: var(--spacing-md);
     flex-shrink: 0;
+    display: grid; /* For centering icon */
+    place-items: center;
+    width: 28px;
+    height: 28px;
 }
-#sidebar-toggle-btn:hover { /* Keep */
+#sidebar-toggle-btn:hover {
     background-color: var(--bg-light);
     color: var(--text-primary);
 }
-#sidebar-toggle-btn:focus-visible { /* Keep */
-    outline: 2px solid var(--accent-primary);
-    outline-offset: 1px;
+#sidebar-toggle-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring-shadow);
+}
+#sidebar-toggle-btn svg { /* SVG icon for toggle */
+    width: 1em;
+    height: 1em;
+    fill: currentColor;
 }
 
-/* --- NEW: Reopen Button Styles --- */
+
+/* Reopen Button */
 #sidebar-reopen-btn {
-    position: absolute; /* Position relative to app-container */
-    top: var(--spacing-md); /* Align near top */
+    position: absolute;
+    top: var(--spacing-md);
     left: var(--reopen-button-offset);
     width: var(--reopen-button-width);
     height: var(--reopen-button-width);
@@ -193,68 +220,34 @@ a:hover, a:focus {
     border: 1px solid var(--border-color);
     color: var(--text-secondary);
     font-size: var(--font-size-large);
-    font-weight: bold;
     cursor: pointer;
-    border-radius: 50%; /* Make it round */
+    border-radius: 50%;
     display: none; /* Hidden by default */
-    place-items: center; /* Center the icon */
-    z-index: 20; /* Ensure it's above other elements */
+    place-items: center;
+    z-index: 20;
     opacity: 0.8;
-    transition: background-color var(--transition-fast),
-                color var(--transition-fast),
-                opacity var(--transition-medium),
-                transform var(--transition-medium);
 }
-
 #sidebar-reopen-btn:hover {
     background-color: hsl(from var(--bg-light) h s calc(l + 8%));
     color: var(--text-primary);
     opacity: 1;
 }
-
 #sidebar-reopen-btn:focus-visible {
-    outline: 2px solid var(--accent-primary);
-    outline-offset: 1px;
+    outline: none;
+    box-shadow: var(--focus-ring-shadow);
+    border-color: var(--accent-primary);
+    opacity: 1;
+}
+#sidebar-reopen-btn svg {
+    width: 0.9em;
+    height: 0.9em;
+    fill: currentColor;
 }
 
-/* Bulk Run Selection Controls */
-#run-bulk-controls {
-    display: flex;
-    gap: var(--spacing-sm);
-    margin-bottom: var(--spacing-md); /* Space before the list */
-    flex-shrink: 0; /* Prevent shrinking */
-}
-
-.bulk-action-btn {
-    flex-grow: 1; /* Make buttons share space */
-    padding: var(--spacing-xs) var(--spacing-sm);
-    font-size: var(--font-size-small);
-    background-color: var(--bg-light);
-    border: 1px solid var(--border-color);
-    color: var(--text-secondary);
-    border-radius: var(--border-radius);
-    cursor: pointer;
-    transition: background-color var(--transition-fast), color var(--transition-fast);
-    text-align: center;
-}
-.bulk-action-btn:hover {
-    background-color: hsl(from var(--bg-light) h s calc(l + 5%));
-    color: var(--text-primary);
-}
-.bulk-action-btn:active {
-    background-color: hsl(from var(--bg-light) h s calc(l - 5%));
-}
-.bulk-action-btn:focus-visible {
-    outline: 2px solid var(--accent-primary);
-    outline-offset: 1px;
-}
-
-/* --- NEW: Styles for Collapsed State --- */
-
+/* Collapsed State */
 #app-container.sidebar-collapsed {
     grid-template-columns: var(--sidebar-collapsed-width) var(--resizer-collapsed-width) 1fr;
 }
-
 #app-container.sidebar-collapsed #sidebar {
     width: var(--sidebar-collapsed-width);
     min-width: var(--sidebar-collapsed-width);
@@ -263,269 +256,511 @@ a:hover, a:focus {
     border-right-width: 0;
     opacity: 0;
     overflow: hidden;
-    /* Make sure the original toggle button is not clickable when hidden */
     pointer-events: none;
 }
-
 #app-container.sidebar-collapsed #resizer {
     width: var(--resizer-collapsed-width);
     opacity: 0;
     cursor: default;
-    pointer-events: none; /* Not interactive when hidden */
+    pointer-events: none;
 }
-
-/* --- NEW: Show Reopen Button when Collapsed --- */
 #app-container.sidebar-collapsed #sidebar-reopen-btn {
-    display: grid; /* Use grid to center content */
+    display: grid;
 }
 
 
-#controls-container { flex-grow: 1; display: flex; flex-direction: column; min-height: 0; }
-#controls-container h3 { font-size: var(--font-size-medium); color: var(--text-secondary); margin-bottom: var(--spacing-md); font-weight: 600; }
-#run-bulk-controls { display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-md); flex-shrink: 0; }
-.bulk-action-btn { flex-grow: 1; padding: var(--spacing-xs) var(--spacing-sm); font-size: var(--font-size-small); background-color: var(--bg-light); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: var(--border-radius); cursor: pointer; transition: background-color var(--transition-fast), color var(--transition-fast); text-align: center; }
-.bulk-action-btn:hover { background-color: hsl(from var(--bg-light) h s calc(l + 5%)); color: var(--text-primary); }
-.bulk-action-btn:active { background-color: hsl(from var(--bg-light) h s calc(l - 5%)); }
-.bulk-action-btn:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
-#run-selector { flex-grow: 1; overflow-y: auto; border: 1px solid var(--border-color); background-color: var(--bg-dark); border-radius: var(--border-radius); padding: var(--spacing-sm); margin-bottom: var(--spacing-md); min-height: 150px; }
-#run-selector p { color: var(--text-placeholder); padding: var(--spacing-md); text-align: center; }
-.run-checkbox-item { display: flex; align-items: center; padding: var(--spacing-sm) var(--spacing-md); border-radius: calc(var(--border-radius) / 1.5); margin-bottom: var(--spacing-xs); transition: background-color var(--transition-fast); cursor: pointer; }
-.run-checkbox-item:hover { background-color: var(--bg-light); }
-.run-checkbox-item label { margin-left: var(--spacing-sm); cursor: pointer; display: inline-flex; align-items: center; flex-grow: 1; color: var(--text-primary); font-size: var(--font-size-base); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.run-checkbox-item input[type="checkbox"] { margin: 0; cursor: pointer; accent-color: var(--accent-primary); width: 16px; height: 16px; flex-shrink: 0; background-color: var(--bg-dark); border: 1px solid var(--border-color); border-radius: 3px; appearance: none; display: grid; place-content: center; }
-.run-checkbox-item input[type="checkbox"]::before { content: ""; width: 0.65em; height: 0.65em; transform: scale(0); transition: 120ms transform ease-in-out; box-shadow: inset 1em 1em var(--accent-primary); clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%); }
-.run-checkbox-item input[type="checkbox"]:checked::before { transform: scale(1); }
-.run-checkbox-item input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
-.color-swatch { display: inline-block; width: 12px; height: 12px; border: 1px solid var(--border-color); margin-right: var(--spacing-sm); flex-shrink: 0; border-radius: 3px; }
-#loading-indicator { font-size: var(--font-size-small); color: var(--text-secondary); margin-top: var(--spacing-sm); display: flex; align-items: center; padding: 0 var(--spacing-md); }
-#loading-indicator::before { content: ''; display: inline-block; width: 0.9em; height: 0.9em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spinner 0.75s linear infinite; margin-right: var(--spacing-sm); }
-@keyframes spinner { to { transform: rotate(360deg); } }
-#error-message { font-size: var(--font-size-small); color: var(--error-color); background-color: var(--error-bg); border: 1px solid var(--error-color); padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--border-radius); margin-top: var(--spacing-md); }
+/* Sidebar Controls */
+#controls-container {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0; /* Important for flex child scrolling */
+    gap: var(--spacing-md); /* Space between control groups */
+}
+#controls-container h3 {
+    font-size: var(--font-size-base); /* Smaller heading */
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-sm); /* Less margin */
+    font-weight: 500;
+    padding-left: var(--spacing-xs); /* Slight indent */
+}
 
+/* Bulk Run Selection */
+#run-bulk-controls {
+    display: flex;
+    gap: var(--spacing-sm);
+    flex-shrink: 0;
+}
+.bulk-action-btn {
+    flex-grow: 1;
+    padding: var(--spacing-sm) var(--spacing-sm); /* Square-ish */
+    font-size: var(--font-size-small);
+    /* Use standard button styles */
+}
+
+/* Run Selector List */
+#run-selector {
+    flex-grow: 1; /* Take remaining space */
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    background-color: var(--bg-dark); /* Slightly darker list bg */
+    border-radius: var(--border-radius);
+    padding: var(--spacing-sm);
+    min-height: 150px;
+    display: flex;
+    flex-direction: column;
+}
+#run-selector p { /* Placeholder inside list */
+    color: var(--text-placeholder);
+    padding: var(--spacing-lg);
+    text-align: center;
+    margin: auto; /* Center vertically */
+}
+.run-checkbox-item {
+    display: flex;
+    align-items: center;
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--border-radius);
+    margin-bottom: 2px; /* Tighter spacing */
+    cursor: pointer;
+}
+.run-checkbox-item:hover {
+    background-color: var(--bg-light);
+}
+.run-checkbox-item label {
+    margin-left: var(--spacing-md); /* More space after checkbox */
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    flex-grow: 1;
+    color: var(--text-primary);
+    font-size: var(--font-size-base);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.3; /* Adjust line height */
+}
+
+/* Custom Checkbox */
+.run-checkbox-item input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    background-color: var(--bg-medium); /* Checkbox background */
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    appearance: none;
+    -webkit-appearance: none;
+    display: grid;
+    place-content: center;
+}
+.run-checkbox-item input[type="checkbox"]::before {
+    content: "";
+    width: 0.65em;
+    height: 0.65em;
+    transform: scale(0);
+    /* Checkmark using clip-path */
+    background-color: var(--text-primary); /* Checkmark color */
+    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+.run-checkbox-item input[type="checkbox"]:checked {
+    background-color: var(--accent-primary);
+    border-color: var(--accent-primary);
+}
+.run-checkbox-item input[type="checkbox"]:checked::before {
+    transform: scale(1);
+    background-color: var(--bg-medium); /* Checkmark color on checked bg */
+}
+.run-checkbox-item input[type="checkbox"]:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring-shadow);
+    border-color: var(--accent-primary);
+}
+
+.color-swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 1px solid rgba(255,255,255,0.1); /* Subtle border */
+    margin-right: var(--spacing-sm);
+    flex-shrink: 0;
+    border-radius: 3px;
+}
+
+/* Loading/Error */
+#loading-indicator, #error-message {
+    font-size: var(--font-size-small);
+    color: var(--text-secondary);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--border-radius);
+    margin-top: var(--spacing-sm);
+    flex-shrink: 0;
+}
+#loading-indicator {
+    display: flex;
+    align-items: center;
+    background-color: var(--bg-light);
+}
+#loading-indicator::before { /* Spinner */
+    content: '';
+    display: inline-block;
+    width: 0.9em;
+    height: 0.9em;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spinner 0.75s linear infinite;
+    margin-right: var(--spacing-sm);
+}
+@keyframes spinner { to { transform: rotate(360deg); } }
+
+#error-message {
+    color: var(--error-color);
+    background-color: var(--error-bg);
+    border: 1px solid var(--error-color);
+}
 
 /* Sidebar Footer */
-.sidebar-footer { margin-top: var(--spacing-lg); padding-top: var(--spacing-md); border-top: 1px solid var(--border-color); font-size: var(--font-size-small); color: var(--text-secondary); flex-shrink: 0; }
-.sidebar-footer p { font-weight: 600; margin-bottom: var(--spacing-sm); }
+.sidebar-footer {
+    margin-top: auto; /* Push to bottom */
+    padding-top: var(--spacing-lg);
+    border-top: 1px solid var(--border-color);
+    font-size: var(--font-size-small);
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    margin-top: var(--spacing-lg);
+}
+.sidebar-footer p { /* Section title */
+     font-weight: 500;
+     margin-bottom: var(--spacing-sm);
+     color: var(--text-primary);
+}
 .sidebar-footer ul { list-style: none; padding-left: 0; }
-.sidebar-footer li { margin-bottom: var(--spacing-xs); }
-.sidebar-footer kbd { display: inline-block; padding: 2px 6px; font-family: monospace; font-size: 0.9em; color: var(--text-primary); background-color: var(--bg-light); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: inset 0 -1px 0 var(--border-color); margin: 0 2px; }
+.sidebar-footer li { margin-bottom: var(--spacing-sm); }
+.sidebar-footer kbd {
+    display: inline-block;
+    padding: 2px 5px;
+    font-family: monospace;
+    font-size: 0.9em;
+    color: var(--text-primary);
+    background-color: var(--bg-light);
+    border: 1px solid var(--border-color);
+    border-bottom-width: 2px; /* Give slight 3D feel */
+    border-radius: 3px;
+    /* box-shadow: inset 0 -1px 0 var(--border-color); */
+    margin: 0 3px;
+}
 
 
 /* Main Content Area Styling */
 #main-content {
     background-color: var(--bg-dark);
-    padding: var(--spacing-lg);
     overflow-y: auto;
-    display: flex; /* Use flexbox for layout */
-    flex-direction: column; /* Stack children vertically */
+    display: flex;
+    flex-direction: column;
     height: 100%;
     grid-column: 3 / 4;
-    /* Add padding-left to avoid content potentially going under the reopen button */
-    /* Adjust value based on button width and offset */
-    /* padding-left: calc(var(--reopen-button-width) + var(--reopen-button-offset) * 2); */
-    /* Alternatively, rely on the button's z-index */
+    position: relative; /* Needed for potential future absolute elements */
 }
 
+/* Search Bar */
 #search-bar-container {
-    padding: 0 var(--spacing-md) var(--spacing-lg); /* Add padding around search bar */
-    flex-shrink: 0; /* Prevent search bar from shrinking */
-    background-color: var(--bg-dark); /* Match main content background */
-    /* border-bottom: 1px solid var(--border-color); /* Optional separator */
-    /* margin-bottom: var(--spacing-lg); /* Adjusted padding instead */
+    padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-md); /* Adjust padding */
+    flex-shrink: 0;
+    background-color: var(--bg-dark);
+    border-bottom: 1px solid var(--border-color);
+    z-index: 5; /* Ensure above dashboard content */
+    position: sticky; /* Keep search bar visible */
+    top: 0;
 }
-
 #metric-search-input {
     width: 100%;
     padding: var(--spacing-sm) var(--spacing-md);
     font-size: var(--font-size-base);
     color: var(--text-primary);
-    background-color: var(--bg-medium); /* Slightly lighter background */
+    background-color: var(--bg-medium);
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
-    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
-    appearance: none; /* Override default browser styling */
-    line-height: 1.4; /* Ensure text fits nicely */
+    appearance: none; /* Includes removing default clear button */
+    -webkit-appearance: none;
+    line-height: 1.4;
 }
-
 #metric-search-input:focus {
     outline: none;
     border-color: var(--accent-primary);
-    box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb) / 0.3); /* Optional focus ring */
+    box-shadow: var(--focus-ring-shadow);
 }
-
 #metric-search-input::placeholder {
     color: var(--text-placeholder);
-    opacity: 1; /* Firefox */
-}
-
-/* Style the clear button (X) in WebKit browsers */
-#metric-search-input::-webkit-search-cancel-button {
-    appearance: none;
-    height: 1em;
-    width: 1em;
-    margin-left: 0.5em;
-    /* Simple cross icon using SVG */
-    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%237a8087'%3E%3Cpath d='M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: center;
-    background-size: contain;
-    cursor: pointer;
-    opacity: 0.7;
-    transition: opacity var(--transition-fast);
-}
-#metric-search-input:placeholder-shown::-webkit-search-cancel-button {
-    /* Hide cancel button when placeholder is shown (i.e., input is empty) */
-    display: none;
-}
-#metric-search-input::-webkit-search-cancel-button:hover {
     opacity: 1;
 }
+/* Custom clear button for search (optional) */
+/* Needs JS to handle clearing */
+#metric-search-input::-webkit-search-cancel-button {
+    display: none; /* Hide default */
+}
 
-/* Dashboard Grid */
+/* Dashboard */
 #dashboard-container {
-    gap: var(--spacing-lg); /* Keep or adjust */
-    flex-grow: 1; /* Allow dashboard to fill remaining space */
-    overflow-y: auto; /* Make dashboard scrollable if needed */
-    padding: 0 var(--spacing-lg) var(--spacing-lg); /* Adjust padding if search bar has it */
+    flex-grow: 1; /* Fill remaining space */
+    overflow-y: auto; /* Allow dashboard itself to scroll if needed */
+    padding: var(--spacing-lg);
+    display: flex; /* Center placeholder */
+    flex-direction: column; /* Stack groups */
+    gap: var(--spacing-lg);
 }
+
+/* Placeholder Text */
+.placeholder-text {
+    color: var(--text-placeholder);
+    text-align: center;
+    font-size: var(--font-size-medium);
+    padding: var(--spacing-xl) var(--spacing-lg);
+    background-color: var(--bg-medium);
+    border: 1px dashed var(--border-color);
+    border-radius: var(--border-radius);
+    margin: auto; /* Vertically and horizontally center */
+    max-width: 500px;
+    align-self: center; /* Ensure centering in flex container */
+}
+
+/* Metric Groups */
+.metric-group {
+    background-color: var(--bg-medium);
+    border-radius: var(--border-radius);
+    border: 1px solid var(--border-color);
+}
+.metric-group:hover {
+     border-color: hsl(from var(--border-color) h s calc(l + 5%));
+}
+
+.metric-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-sm) var(--spacing-md);
+    /* background-color: var(--bg-light); Slightly different bg for header */
+    cursor: pointer;
+}
+.metric-group-header:hover {
+    background-color: var(--bg-light);
+}
+.metric-group-header h3 {
+    font-size: var(--font-size-base);
+    font-weight: 500;
+    color: var(--text-primary); /* Header text slightly more prominent */
+    margin: 0;
+    flex-grow: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Toggle Button Icon */
+.toggle-button {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 1.2em;
+    padding: 0 var(--spacing-sm);
+    line-height: 1;
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    border-radius: 50%; /* Round button */
+}
+.toggle-button:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-light);
+}
+.toggle-button svg {
+    width: 0.7em;
+    height: 0.7em;
+    fill: currentColor;
+}
+/* Rotate chevron */
+.metric-group:not(.collapsed) .toggle-button svg {
+     transform: rotate(90deg);
+}
+.metric-group.collapsed .toggle-button svg {
+     transform: rotate(0deg);
+}
+.toggle-button:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring-shadow);
+}
+
+
 .metric-group-plots {
-    /* display: grid; Keep grid */
-    /* grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); Keep */
-    gap: var(--spacing-lg); /* Keep */
-    padding: var(--spacing-lg); /* Keep */
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(350px, 100%), 1fr)); /* Adjust min size */
+    gap: var(--spacing-lg);
+    padding: var(--spacing-lg);
+    border-top: 1px solid var(--border-color);
+    max-height: 5000px; /* Large value for expanded state */
+    overflow: hidden;
 }
-.metric-group-header { display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-sm) var(--spacing-md); background-color: var(--bg-light); border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background-color var(--transition-fast); }
-.metric-group-header:hover { background-color: hsl(from var(--bg-light) h s calc(l + 5%)); }
-.metric-group-header h3 { font-size: var(--font-size-medium); font-weight: 600; color: var(--text-primary); margin: 0; flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.toggle-button { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2em; padding: 0 var(--spacing-sm); line-height: 1; transition: transform var(--transition-fast); flex-shrink: 0; }
-.toggle-button::before { content: '−'; display: inline-block; width: 1em; text-align: center; }
-.metric-group.collapsed .toggle-button::before { content: '+'; }
-.toggle-button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; border-radius: 3px; }
-.metric-group-plots { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); gap: var(--spacing-lg); padding: var(--spacing-lg); }
-.metric-group.collapsed .metric-group-plots { display: none; }
-.metric-group-plots .plot-wrapper {
-    margin-bottom: 0;
+.metric-group.collapsed .metric-group-plots {
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-top-color: transparent;
+    overflow: hidden; /* Ensure content is clipped */
 }
-.placeholder-text { color: var(--text-placeholder); text-align: center; font-size: var(--font-size-medium); padding: var(--spacing-xl); background-color: var(--bg-medium); border: 1px dashed var(--border-color); border-radius: var(--border-radius); margin: auto; max-width: 600px; }
 
-/* Plot Wrapper Styling */
+
+/* Plot Wrapper Grid Layout */
 .plot-wrapper {
-    /* background-color: var(--bg-medium); Remove direct bg color here */
-    border: none; /* Remove border from wrapper, apply to grid cells */
-    /* box-shadow: var(--box-shadow); Remove shadow */
-    /* display: flex; Remove flex */
-    /* flex-direction: column; Remove flex */
-    /* min-height: 350px; Remove min-height */
-    overflow: hidden; /* Keep overflow hidden */
-
-    /* --- NEW Grid Layout --- */
     display: grid;
     grid-template-columns: var(--plot-yaxis-width) 1fr; /* Y-Axis | Plot */
     grid-template-rows: auto 1fr var(--plot-xaxis-height); /* Title | Plot | X-Axis */
-    /* Add some default height */
-    height: 400px; /* Or adjust as needed */
-    background-color: var(--bg-medium); /* Apply bg to whole grid area */
-    border-radius: var(--border-radius); /* Keep border-radius */
-    box-shadow: var(--box-shadow); /* Keep shadow */
+    height: 350px; /* Default plot height */
+    background-color: var(--bg-dark); /* Slightly different plot background */
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    overflow: hidden; /* Clip contents */
 }
 
-/* Style the Title Area (Spans across grid columns) */
+/* Title Area */
 .plot-wrapper h3 {
-    /* --- Grid Positioning --- */
-    grid-column: 1 / 3; /* Span both columns */
-    grid-row: 1 / 2;    /* First row */
-
-    /* --- Keep existing styles --- */
-    font-size: var(--font-size-base);
+    grid-column: 1 / 3; /* Span columns */
+    grid-row: 1 / 2;
+    font-size: var(--font-size-small); /* Smaller title */
     font-weight: 500;
     color: var(--text-secondary);
     padding: var(--spacing-sm) var(--spacing-md);
     margin: 0;
-    border-bottom: 1px solid var(--axis-border-color); /* Use axis border color */
-    background-color: var(--bg-medium);
+    border-bottom: 1px solid var(--border-color);
+    background-color: var(--bg-medium); /* Title background */
     text-align: left;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    border-top-left-radius: var(--border-radius); /* Round corners */
-    border-top-right-radius: var(--border-radius);
+    line-height: 1.3;
 }
 
-
-/* Style the Y-Axis Canvas Area */
-.plot-yaxis-container { /* NEW container div */
+/* Y-Axis */
+.plot-yaxis-container {
     grid-column: 1 / 2;
     grid-row: 2 / 3;
-    border-right: 1px solid var(--axis-border-color);
-    position: relative; /* For canvas positioning if needed */
-    background-color: var(--bg-medium); /* Match background */
+    border-right: 1px solid var(--border-color);
+    position: relative;
+    background-color: var(--bg-dark);
 }
-.plot-yaxis { /* The canvas itself */
-    display: block;
-    width: 100%;
-    height: 100%;
-}
+.plot-yaxis { display: block; width: 100%; height: 100%; }
 
-/* Style the Main Plot Canvas Area */
-.plot-canvas-container { /* NEW container div */
+/* Main Plot Canvas */
+.plot-canvas-container {
     grid-column: 2 / 3;
     grid-row: 2 / 3;
-    position: relative; /* For canvas positioning */
-    background-color: var(--bg-medium); /* Match background */
+    position: relative;
+    background-color: var(--bg-dark);
 }
-.plot-canvas { /* The main webgl canvas */
+.plot-canvas {
     display: block;
     width: 100%;
     height: 100%;
     cursor: grab;
-    /* min-height: 250px; Remove specific min-height here */
 }
 .plot-canvas:active { cursor: grabbing; }
 .plot-canvas[style*="cursor: crosshair"] { cursor: crosshair !important; }
 .plot-canvas[style*="cursor: grabbing"] { cursor: grabbing !important; }
 
-/* Style the Corner Filler Area */
-.plot-corner { /* NEW */
+/* Corner */
+.plot-corner {
     grid-column: 1 / 2;
     grid-row: 3 / 4;
-    border-top: 1px solid var(--axis-border-color);
-    border-right: 1px solid var(--axis-border-color);
-    background-color: var(--bg-medium);
-    border-bottom-left-radius: var(--border-radius); /* Round corner */
+    border-top: 1px solid var(--border-color);
+    border-right: 1px solid var(--border-color);
+    background-color: var(--bg-dark);
 }
 
-/* Style the X-Axis Canvas Area */
-.plot-xaxis-container { /* NEW container div */
+/* X-Axis */
+.plot-xaxis-container {
     grid-column: 2 / 3;
     grid-row: 3 / 4;
-    border-top: 1px solid var(--axis-border-color);
-    position: relative; /* For canvas positioning if needed */
-    background-color: var(--bg-medium); /* Match background */
-    border-bottom-right-radius: var(--border-radius); /* Round corner */
+    border-top: 1px solid var(--border-color);
+    position: relative;
+    background-color: var(--bg-dark);
 }
-.plot-xaxis { /* The canvas itself */
-    display: block;
-    width: 100%;
-    height: 100%;
+.plot-xaxis { display: block; width: 100%; height: 100%; }
+
+
+/* Tooltip */
+#plot-tooltip {
+    position: absolute;
+    display: none;
+    background-color: hsla(from var(--bg-light) h s l / 95%); /* Use HSL for alpha */
+    color: var(--text-primary);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--border-radius);
+    font-size: var(--font-size-small);
+    pointer-events: none;
+    z-index: 1000;
+    white-space: nowrap;
+    border: 1px solid var(--border-color);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.3); /* Slightly larger tooltip shadow */
+    line-height: 1.4;
+}
+#plot-tooltip strong {
+    color: var(--text-primary); /* Ensure strong text is primary */
+    font-weight: 500;
+}
+#plot-tooltip span[style*="background-color"] { /* Color swatch in tooltip */
+    border: 1px solid rgba(255,255,255,0.15);
 }
 
-.plot-yaxis-container,
-.plot-xaxis-container,
-.plot-corner {
-    background-color: var(--bg-medium); /* Keep or adjust if needed */
-    /* border-color: var(--axis-border-color); /* Ensure borders use the updated color if overrides exist */
+/* Info Footer */
+.info {
+    margin-top: var(--spacing-xl);
+    text-align: center;
+    font-size: var(--font-size-small);
+    color: var(--text-secondary);
+    padding: var(--spacing-lg);
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0; /* Prevent shrinking */
 }
-
-/* Info Footer in Main Content */
-.info { margin-top: var(--spacing-xl); text-align: center; font-size: var(--font-size-small); color: var(--text-secondary); padding-bottom: var(--spacing-md); }
 .info p { margin-bottom: var(--spacing-xs); }
 
-/* Scrollbar Styling (Webkit - Chrome, Safari, Edge) */
+
+/* Scrollbar Styling (Webkit) */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-track { background: var(--bg-dark); border-radius: 5px; }
-::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 5px; border: 2px solid var(--bg-dark); }
-::-webkit-scrollbar-thumb:hover { background-color: var(--text-secondary); }
-#sidebar::-webkit-scrollbar-track { background: var(--bg-medium); }
-#sidebar::-webkit-scrollbar-thumb { border: 2px solid var(--bg-medium); }
-#run-selector::-webkit-scrollbar-track { background: var(--bg-dark); }
-#run-selector::-webkit-scrollbar-thumb { border: 2px solid var(--bg-dark); }
+::-webkit-scrollbar-track { background: transparent; /* Track blends with container */ }
+::-webkit-scrollbar-thumb {
+    background-color: var(--border-color);
+    border-radius: 5px;
+    border: 2px solid transparent; /* Creates padding effect */
+    background-clip: padding-box; /* Important */
+}
+::-webkit-scrollbar-thumb:hover {
+    background-color: var(--text-secondary);
+}
+/* Specific scrollbars */
+#sidebar::-webkit-scrollbar-track,
+#run-selector::-webkit-scrollbar-track {
+    background: var(--bg-medium);
+}
+#sidebar::-webkit-scrollbar-thumb,
+#run-selector::-webkit-scrollbar-thumb {
+    border-color: var(--bg-medium); /* Match track for padding */
+}
+
+#main-content::-webkit-scrollbar-track,
+#dashboard-container::-webkit-scrollbar-track {
+     background: var(--bg-dark);
+}
+#main-content::-webkit-scrollbar-thumb,
+#dashboard-container::-webkit-scrollbar-thumb {
+     border-color: var(--bg-dark);
+}
+
+/* Firefox scrollbar styling (optional) */
+/* * { scrollbar-width: thin; scrollbar-color: var(--border-color) transparent; }
+#sidebar, #run-selector { scrollbar-color: var(--border-color) var(--bg-medium); }
+#main-content, #dashboard-container { scrollbar-color: var(--border-color) var(--bg-dark); } */

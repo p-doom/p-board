@@ -12,10 +12,14 @@
         <aside id="sidebar">
             <div class="sidebar-header">
                  <h2>p-board</h2>
+                 <!-- SIDEBAR TOGGLE BUTTON -->
+                 <button id="sidebar-toggle-btn" aria-label="Toggle Sidebar" title="Toggle Sidebar">
+                    <!-- Icon: e.g., Chevron Left -->
+                    <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+                 </button>
             </div>
             <div id="controls-container">
-                <!-- ... (rest of controls) ... -->
-                 <h3>Select Runs:</h3>
+                <h3>Select Runs:</h3>
                  <div id="run-bulk-controls" style="display: none;">
                     <button class="bulk-action-btn" id="select-all-runs">Select All</button>
                     <button class="bulk-action-btn" id="deselect-all-runs">Deselect All</button>
@@ -24,31 +28,44 @@
                     <p>Loading runs...</p>
                 </div>
                 <div id="loading-indicator" style="display: none;">Fetching data...</div>
-                <div id="error-message" style="color: red; margin-top: 10px;"></div>
+                <div id="error-message" style="display: none;"></div> <!-- Hide error initially -->
             </div>
              <div class="sidebar-footer">
-                 <!-- ... (rest of footer) ... -->
+                <p>Controls:</p>
+                <ul>
+                    <li><kbd>Left Click + Drag</kbd> Zoom Box</li>
+                    <li><kbd>Right Click + Drag</kbd> Pan</li>
+                    <li><kbd>Double Click</kbd> Reset View</li>
+                    <li><kbd>Shift + Scroll</kbd> Zoom In/Out</li>
+                </ul>
              </div>
         </aside>
 
         <main id="main-content">
-            <!-- ========= NEW SEARCH BAR START ========= -->
             <div id="search-bar-container">
                 <input type="search" id="metric-search-input" placeholder="Filter metrics by name...">
             </div>
-            <!-- ========= NEW SEARCH BAR END =========== -->
 
             <div id="dashboard-container">
                  <p class="placeholder-text">Select runs from the sidebar to view plots.</p>
+                 <!-- Metric groups will be added here by JS -->
             </div>
-            <div class="info">
-                 <!-- ... (rest of info) ... -->
+
+            <div class="info" style="display: none;"> <!-- Hide info initially or remove if not needed -->
+                 <p>p-board: suckless TensorBoard</p>
             </div>
         </main>
 
+        <!-- SIDEBAR REOPEN BUTTON -->
+        <button id="sidebar-reopen-btn" aria-label="Open Sidebar" title="Open Sidebar">
+            <!-- Icon: e.g., Chevron Right -->
+            <svg viewBox="0 0 24 24"><path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
+        </button>
+
     </div> <!-- End app-container -->
+
     <!-- Tooltip Element -->
-    <div id="plot-tooltip" style="position: absolute; display: none; background-color: rgba(40, 44, 52, 0.9); color: var(--text-primary); padding: 5px 10px; border-radius: 4px; font-size: var(--font-size-small); pointer-events: none; z-index: 1000; white-space: nowrap; border: 1px solid var(--border-color); box-shadow: 0 2px 5px rgba(0,0,0,0.3);"></div>
+    <div id="plot-tooltip"></div> <!-- Content set by JS -->
 
     <script src="webglplot.umd.min.js"></script>
     <script type="module" src="main.js"></script>
