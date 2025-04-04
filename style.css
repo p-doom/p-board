@@ -48,6 +48,12 @@
     --resizer-collapsed-width: 0px; /* Hide resizer when collapsed */
     --reopen-button-width: 30px;
     --reopen-button-offset: 5px; /* How far from the edge */
+
+    --plot-yaxis-width: 60px; /* Adjust as needed */
+    --plot-xaxis-height: 30px; /* Adjust as needed */
+    --axis-border-color: var(--border-color); /* Use existing border color */
+    --axis-text-color: var(--text-secondary);
+    --axis-font: 10px var(--font-family); /* Smaller font for axes */
 }
 
 /* Basic Reset */
@@ -318,8 +324,15 @@ a:hover, a:focus {
 }
 
 /* Dashboard Grid */
-#dashboard-container { display: flex; flex-direction: column; gap: var(--spacing-lg); }
-.metric-group { background-color: var(--bg-medium); border: 1px solid var(--border-color); border-radius: var(--border-radius); overflow: hidden; }
+#dashboard-container {
+    gap: var(--spacing-lg); /* Keep or adjust */
+}
+.metric-group-plots {
+    /* display: grid; Keep grid */
+    /* grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); Keep */
+    gap: var(--spacing-lg); /* Keep */
+    padding: var(--spacing-lg); /* Keep */
+}
 .metric-group-header { display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-sm) var(--spacing-md); background-color: var(--bg-light); border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background-color var(--transition-fast); }
 .metric-group-header:hover { background-color: hsl(from var(--bg-light) h s calc(l + 5%)); }
 .metric-group-header h3 { font-size: var(--font-size-medium); font-weight: 600; color: var(--text-primary); margin: 0; flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -329,16 +342,111 @@ a:hover, a:focus {
 .toggle-button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; border-radius: 3px; }
 .metric-group-plots { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); gap: var(--spacing-lg); padding: var(--spacing-lg); }
 .metric-group.collapsed .metric-group-plots { display: none; }
-.metric-group-plots .plot-wrapper { margin-bottom: 0; }
+.metric-group-plots .plot-wrapper {
+    margin-bottom: 0;
+}
 .placeholder-text { color: var(--text-placeholder); text-align: center; font-size: var(--font-size-medium); padding: var(--spacing-xl); background-color: var(--bg-medium); border: 1px dashed var(--border-color); border-radius: var(--border-radius); margin: auto; max-width: 600px; }
 
 /* Plot Wrapper Styling */
-.plot-wrapper { background-color: var(--bg-medium); border: 1px solid var(--border-color); border-radius: var(--border-radius); box-shadow: var(--box-shadow); display: flex; flex-direction: column; min-height: 350px; overflow: hidden; }
-.plot-wrapper h3 { font-size: var(--font-size-base); font-weight: 500; color: var(--text-secondary); padding: var(--spacing-sm) var(--spacing-md); margin: 0; border-bottom: 1px solid var(--border-color); background-color: var(--bg-medium); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.plot-canvas { width: 100%; flex-grow: 1; display: block; background-color: var(--bg-medium); cursor: grab; min-height: 250px; }
+.plot-wrapper {
+    /* background-color: var(--bg-medium); Remove direct bg color here */
+    border: none; /* Remove border from wrapper, apply to grid cells */
+    /* box-shadow: var(--box-shadow); Remove shadow */
+    /* display: flex; Remove flex */
+    /* flex-direction: column; Remove flex */
+    /* min-height: 350px; Remove min-height */
+    overflow: hidden; /* Keep overflow hidden */
+
+    /* --- NEW Grid Layout --- */
+    display: grid;
+    grid-template-columns: var(--plot-yaxis-width) 1fr; /* Y-Axis | Plot */
+    grid-template-rows: auto 1fr var(--plot-xaxis-height); /* Title | Plot | X-Axis */
+    /* Add some default height */
+    height: 400px; /* Or adjust as needed */
+    background-color: var(--bg-medium); /* Apply bg to whole grid area */
+    border-radius: var(--border-radius); /* Keep border-radius */
+    box-shadow: var(--box-shadow); /* Keep shadow */
+}
+
+/* Style the Title Area (Spans across grid columns) */
+.plot-wrapper h3 {
+    /* --- Grid Positioning --- */
+    grid-column: 1 / 3; /* Span both columns */
+    grid-row: 1 / 2;    /* First row */
+
+    /* --- Keep existing styles --- */
+    font-size: var(--font-size-base);
+    font-weight: 500;
+    color: var(--text-secondary);
+    padding: var(--spacing-sm) var(--spacing-md);
+    margin: 0;
+    border-bottom: 1px solid var(--axis-border-color); /* Use axis border color */
+    background-color: var(--bg-medium);
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    border-top-left-radius: var(--border-radius); /* Round corners */
+    border-top-right-radius: var(--border-radius);
+}
+
+
+/* Style the Y-Axis Canvas Area */
+.plot-yaxis-container { /* NEW container div */
+    grid-column: 1 / 2;
+    grid-row: 2 / 3;
+    border-right: 1px solid var(--axis-border-color);
+    position: relative; /* For canvas positioning if needed */
+    background-color: var(--bg-medium); /* Match background */
+}
+.plot-yaxis { /* The canvas itself */
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+/* Style the Main Plot Canvas Area */
+.plot-canvas-container { /* NEW container div */
+    grid-column: 2 / 3;
+    grid-row: 2 / 3;
+    position: relative; /* For canvas positioning */
+    background-color: var(--bg-medium); /* Match background */
+}
+.plot-canvas { /* The main webgl canvas */
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+    /* min-height: 250px; Remove specific min-height here */
+}
 .plot-canvas:active { cursor: grabbing; }
 .plot-canvas[style*="cursor: crosshair"] { cursor: crosshair !important; }
 .plot-canvas[style*="cursor: grabbing"] { cursor: grabbing !important; }
+
+/* Style the Corner Filler Area */
+.plot-corner { /* NEW */
+    grid-column: 1 / 2;
+    grid-row: 3 / 4;
+    border-top: 1px solid var(--axis-border-color);
+    border-right: 1px solid var(--axis-border-color);
+    background-color: var(--bg-medium);
+    border-bottom-left-radius: var(--border-radius); /* Round corner */
+}
+
+/* Style the X-Axis Canvas Area */
+.plot-xaxis-container { /* NEW container div */
+    grid-column: 2 / 3;
+    grid-row: 3 / 4;
+    border-top: 1px solid var(--axis-border-color);
+    position: relative; /* For canvas positioning if needed */
+    background-color: var(--bg-medium); /* Match background */
+    border-bottom-right-radius: var(--border-radius); /* Round corner */
+}
+.plot-xaxis { /* The canvas itself */
+    display: block;
+    width: 100%;
+    height: 100%;
+}
 
 /* Info Footer in Main Content */
 .info { margin-top: var(--spacing-xl); text-align: center; font-size: var(--font-size-small); color: var(--text-secondary); padding-bottom: var(--spacing-md); }

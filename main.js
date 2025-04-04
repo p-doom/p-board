@@ -20,6 +20,174 @@ const deselectAllBtn = document.getElementById('deselect-all-runs');
 
 // --- Configuration ---
 const API_BASE_URL = 'http://localhost:5001'; // Adjust if backend runs elsewhere
+const AXIS_DIVISIONS = 8; // Number of ticks/labels on axes
+const AXIS_TEXT_STYLE = {
+    font: getComputedStyle(document.documentElement).getPropertyValue('--axis-font') || '10px sans-serif',
+    fillStyle: getComputedStyle(document.documentElement).getPropertyValue('--axis-text-color') || '#9a9fa6',
+    strokeStyle: getComputedStyle(document.documentElement).getPropertyValue('--axis-text-color') || '#9a9fa6',
+    tickSize: 5,
+};
+
+/**
+ * Initializes a 2D canvas for axis drawing.
+ * @param {HTMLCanvasElement} canvas
+ * @returns {CanvasRenderingContext2D | null}
+ */
+function initAxisCanvas(canvas) {
+    if (!canvas) return null;
+    try {
+        const devicePixelRatio = window.devicePixelRatio || 1;
+        // Ensure client dimensions are read correctly *after* layout
+        const clientWidth = canvas.clientWidth;
+        const clientHeight = canvas.clientHeight;
+
+        if (clientWidth <= 0 || clientHeight <= 0) {
+             console.warn("Axis canvas has zero client dimensions during init", canvas.id);
+             // Set a minimal size to avoid errors, will be corrected on resize
+             canvas.width = 1 * devicePixelRatio;
+             canvas.height = 1 * devicePixelRatio;
+        } else {
+            canvas.width = Math.round(clientWidth * devicePixelRatio);
+            canvas.height = Math.round(clientHeight * devicePixelRatio);
+        }
+
+
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            ctx.font = AXIS_TEXT_STYLE.font;
+            ctx.fillStyle = AXIS_TEXT_STYLE.fillStyle;
+            ctx.strokeStyle = AXIS_TEXT_STYLE.strokeStyle;
+            ctx.lineWidth = 1; // Ensure thin lines for ticks
+        }
+        return ctx;
+    } catch (e) {
+        console.error("Error initializing axis canvas:", canvas.id, e);
+        return null;
+    }
+}
+
+/**
+ * Resizes both axis canvases for a given plotInfo.
+ * @param {object} plotInfo The plot info object containing axis canvases.
+ */
+function sizeAxisCanvases(plotInfo) {
+    if (plotInfo.xAxisCanvas && plotInfo.ctxX) {
+        const ctxX = initAxisCanvas(plotInfo.xAxisCanvas);
+        if (ctxX) plotInfo.ctxX = ctxX; // Update context if re-initialized
+    }
+     if (plotInfo.yAxisCanvas && plotInfo.ctxY) {
+         const ctxY = initAxisCanvas(plotInfo.yAxisCanvas);
+         if (ctxY) plotInfo.ctxY = ctxY; // Update context if re-initialized
+     }
+}
+
+/**
+ * Formats a number for axis display.
+ * Avoids overly long decimals or exponentials for typical ranges.
+ * @param {number} value The number to format.
+ * @param {number} range The approximate range (max-min) of the axis.
+ * @returns {string} Formatted string label.
+ */
+function formatAxisValue(value, range) {
+    if (!isFinite(value)) return "";
+    if (Math.abs(value) < 1e-9 && Math.abs(value) !== 0) return "0"; // Handle very small non-zeros
+
+    const absVal = Math.abs(value);
+    const absRange = Math.abs(range);
+
+    // Use exponential if value is very large or very small compared to range, or range itself is tiny/huge
+    if (absRange > 1e6 || absRange < 1e-3 || absVal > 1e7 || (absVal < 1e-4 && absVal !== 0) ) {
+        return value.toExponential(1);
+    }
+
+    // Determine number of decimal places based on range
+    let decimals = 0;
+    if (absRange < 1) decimals = 3;
+    else if (absRange < 10) decimals = 2;
+    else if (absRange < 100) decimals = 1;
+
+     // Adjust decimals if the value itself is small
+     if (absVal > 0 && absVal < 1) {
+         decimals = Math.max(decimals, Math.min(3, Math.ceil(-Math.log10(absVal)) + 1));
+     } else if (absVal === 0) {
+         decimals = 0;
+     }
+
+
+    // Use toFixed for reasonable ranges
+    return value.toFixed(decimals);
+}
+
+
+/**
+ * Draws the X-axis ticks and labels.
+ * @param {CanvasRenderingContext2D} ctx2d
+ * @param {number} width Canvas width (pixels)
+ * @param {number} height Canvas height (pixels)
+ * @param {number} scale WebGL plot gScaleX
+ * @param {number} offset WebGL plot gOffsetX
+ * @param {number} divs Number of divisions/ticks
+ */
+function drawAxisX(ctx2d, width, height, scale, offset, divs) {
+    if (!ctx2d || width <= 0 || height <= 0 || !isFinite(scale) || !isFinite(offset)) return;
+
+    ctx2d.clearRect(0, 0, width, height);
+    ctx2d.textAlign = "center";
+    ctx2d.textBaseline = "top"; // Align text below the tick
+
+    const axisRange = (Math.abs(scale) > 1e-9) ? 2 / scale : 0; // Approximate data range visible
+
+    for (let i = 0; i <= divs; i++) {
+        const normX = (i / divs) * 2 - 1; // Normalized coordinate [-1, 1]
+        // Convert normalized coordinate back to data coordinate
+        const dataX = (Math.abs(scale) > 1e-9) ? (normX - offset) / scale : 0;
+        const canvasX = (i / divs) * width; // Pixel position on canvas
+
+        const label = formatAxisValue(dataX, axisRange);
+        ctx2d.fillText(label, canvasX, AXIS_TEXT_STYLE.tickSize + 2); // Text below tick
+
+        // Draw tick mark
+        ctx2d.beginPath();
+        ctx2d.moveTo(canvasX, 0);
+        ctx2d.lineTo(canvasX, AXIS_TEXT_STYLE.tickSize);
+        ctx2d.stroke();
+    }
+}
+
+/**
+ * Draws the Y-axis ticks and labels.
+ * @param {CanvasRenderingContext2D} ctx2d
+ * @param {number} width Canvas width (pixels)
+ * @param {number} height Canvas height (pixels)
+ * @param {number} scale WebGL plot gScaleY
+ * @param {number} offset WebGL plot gOffsetY
+ * @param {number} divs Number of divisions/ticks
+ */
+function drawAxisY(ctx2d, width, height, scale, offset, divs) {
+    if (!ctx2d || width <= 0 || height <= 0 || !isFinite(scale) || !isFinite(offset)) return;
+
+    ctx2d.clearRect(0, 0, width, height);
+    ctx2d.textAlign = "right"; // Align text left of the tick
+    ctx2d.textBaseline = "middle"; // Center text vertically
+
+    const axisRange = (Math.abs(scale) > 1e-9) ? 2 / scale : 0; // Approximate data range visible
+
+    for (let i = 0; i <= divs; i++) {
+        const normY = 1 - (i / divs) * 2; // Normalized coordinate [1, -1] (inverted Y)
+         // Convert normalized coordinate back to data coordinate
+        const dataY = (Math.abs(scale) > 1e-9) ? (normY - offset) / scale : 0;
+        const canvasY = (i / divs) * height; // Pixel position on canvas
+
+        const label = formatAxisValue(dataY, axisRange);
+        ctx2d.fillText(label, width - AXIS_TEXT_STYLE.tickSize - 4, canvasY); // Text left of tick
+
+        // Draw tick mark
+        ctx2d.beginPath();
+        ctx2d.moveTo(width - AXIS_TEXT_STYLE.tickSize, canvasY);
+        ctx2d.lineTo(width, canvasY); // Tick goes to the right edge
+        ctx2d.stroke();
+    }
+}
 
 // --- State ---
 let availableRuns = [];
@@ -417,7 +585,9 @@ function removePlot(metricName) {
 function createOrUpdatePlot(metricName, plotDataForMetric, parentElement) {
     let plotInfo = activePlots[metricName];
     let wglp, zoomRectLine;
-    const plotContainerId = `plot-wrapper-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    // Use the metricName for IDs, ensure it's DOM-safe
+    const safeMetricName = metricName.replace(/[^a-zA-Z0-9]/g, '-');
+    const plotContainerId = `plot-wrapper-${safeMetricName}`;
 
     // --- Calculate Overall Data Range ---
     let overallMinStep = Infinity, overallMaxStep = -Infinity;
@@ -470,37 +640,94 @@ function createOrUpdatePlot(metricName, plotDataForMetric, parentElement) {
 
     // --- Create Plot or Ensure Correct Parent ---
     let wrapper = document.getElementById(plotContainerId);
-    let canvas;
+    let canvas, yAxisCanvas, xAxisCanvas; // Declare axis canvases
     let needsInitialization = false;
 
     if (!plotInfo) {
         needsInitialization = true;
+        // --- Create wrapper and internal grid structure ---
         if (wrapper) {
             console.warn(`Plot wrapper ${plotContainerId} exists but no state. Reusing element, initializing state.`);
-            if (wrapper.parentNode !== parentElement) {
-                console.warn(`Moving existing plot wrapper ${plotContainerId} to correct parent.`);
-                parentElement.appendChild(wrapper);
-            }
-            canvas = wrapper.querySelector('canvas');
-            if (!canvas) {
-                console.error("Wrapper exists but canvas missing. Recreating canvas.");
-                canvas = document.createElement('canvas'); canvas.className = 'plot-canvas';
-                wrapper.appendChild(canvas);
-            }
+             // Ensure it's in the correct parent group container
+             if (wrapper.parentNode !== parentElement) {
+                 console.warn(`Moving existing plot wrapper ${plotContainerId} to correct parent group.`);
+                 parentElement.appendChild(wrapper);
+             }
+             // Find existing elements (might be missing if structure changed)
+             yAxisCanvas = wrapper.querySelector('.plot-yaxis');
+             canvas = wrapper.querySelector('.plot-canvas'); // Main plot canvas
+             xAxisCanvas = wrapper.querySelector('.plot-xaxis');
+             // Recreate missing elements if necessary
+             if (!yAxisCanvas || !canvas || !xAxisCanvas) {
+                console.error(`Plot wrapper ${plotContainerId} exists but internal structure is missing. Rebuilding.`);
+                wrapper.innerHTML = ''; // Clear potentially broken content
+                // Re-add title and create grid elements below
+             }
         } else {
             wrapper = document.createElement('div');
-            wrapper.className = 'plot-wrapper';
+            wrapper.className = 'plot-wrapper'; // This now defines the grid container
             wrapper.id = plotContainerId;
             wrapper.dataset.metricName = metricName; // Store metric name
-            const title = document.createElement('h3');
-            title.textContent = metricName; title.title = metricName;
-            canvas = document.createElement('canvas'); canvas.className = 'plot-canvas';
-            wrapper.appendChild(title); wrapper.appendChild(canvas);
             parentElement.appendChild(wrapper); // Append to the correct group plot container
         }
 
+        // --- Always ensure grid children exist if initializing or rebuilding ---
+        if (needsInitialization || wrapper.children.length < 4) {
+             wrapper.innerHTML = ''; // Clear previous content if rebuilding
+
+             const title = document.createElement('h3');
+             title.textContent = metricName; title.title = metricName;
+             wrapper.appendChild(title);
+
+             // Create containers for canvases (for styling separation)
+             const yAxisContainer = document.createElement('div');
+             yAxisContainer.className = 'plot-yaxis-container';
+             yAxisCanvas = document.createElement('canvas');
+             yAxisCanvas.className = 'plot-yaxis';
+             yAxisCanvas.id = `plot-yaxis-${safeMetricName}`;
+             yAxisContainer.appendChild(yAxisCanvas);
+             wrapper.appendChild(yAxisContainer);
+
+             const canvasContainer = document.createElement('div');
+             canvasContainer.className = 'plot-canvas-container';
+             canvas = document.createElement('canvas'); // Main plot canvas
+             canvas.className = 'plot-canvas';
+             canvas.id = `plot-canvas-${safeMetricName}`;
+             canvasContainer.appendChild(canvas);
+             wrapper.appendChild(canvasContainer);
+
+             const cornerDiv = document.createElement('div'); // Filler
+             cornerDiv.className = 'plot-corner';
+             wrapper.appendChild(cornerDiv);
+
+             const xAxisContainer = document.createElement('div');
+             xAxisContainer.className = 'plot-xaxis-container';
+             xAxisCanvas = document.createElement('canvas');
+             xAxisCanvas.className = 'plot-xaxis';
+             xAxisCanvas.id = `plot-xaxis-${safeMetricName}`;
+             xAxisContainer.appendChild(xAxisCanvas);
+             wrapper.appendChild(xAxisContainer);
+
+        } else {
+             // If reusing wrapper and structure exists, just get references
+             yAxisCanvas = wrapper.querySelector('.plot-yaxis');
+             canvas = wrapper.querySelector('.plot-canvas');
+             xAxisCanvas = wrapper.querySelector('.plot-xaxis');
+        }
+
+
+        // --- Initialize WebGL Plot and Axis Contexts ---
+        if (!canvas) {
+             console.error("Main plot canvas could not be found or created for", metricName);
+             // Attempt cleanup?
+             if(wrapper && wrapper.parentNode) parentElement.removeChild(wrapper);
+             return; // Cannot proceed
+        }
+
         const devicePixelRatio = window.devicePixelRatio || 1;
-        const initialWidth = canvas.clientWidth || 400; const initialHeight = canvas.clientHeight || 300;
+        // Size the main canvas (axes will be sized in sizeAxisCanvases)
+        const initialWidth = canvas.clientWidth || 400;
+        const initialHeight = canvas.clientHeight || 300;
         canvas.width = Math.max(1, Math.round(initialWidth * devicePixelRatio));
         canvas.height = Math.max(1, Math.round(initialHeight * devicePixelRatio));
 
@@ -509,41 +736,65 @@ function createOrUpdatePlot(metricName, plotDataForMetric, parentElement) {
         zoomRectLine.loop = true; zoomRectLine.xy = new Float32Array(8).fill(0); zoomRectLine.visible = false;
         wglp.addLine(zoomRectLine);
 
-        plotInfo = { wglp, zoomRectLine, lines: {}, isInitialLoad: true };
+        // --- Initialize Axis Contexts ---
+        const ctxX = initAxisCanvas(xAxisCanvas);
+        const ctxY = initAxisCanvas(yAxisCanvas);
+
+        plotInfo = {
+            wglp,
+            zoomRectLine,
+            lines: {},
+            isInitialLoad: true,
+            canvas,        // Main canvas
+            yAxisCanvas,   // Y axis canvas element
+            xAxisCanvas,   // X axis canvas element
+            ctxX,          // X axis 2D context
+            ctxY,          // Y axis 2D context
+            // Store range data
+            minStep: overallMinStep, maxStep: overallMaxStep,
+            minY: overallMinY, maxY: overallMaxY,
+        };
         activePlots[metricName] = plotInfo;
 
-        setupInteractions(canvas, wglp, zoomRectLine, plotInfo);
+        // Size axis canvases based on initial client rects AFTER appending
+        sizeAxisCanvases(plotInfo);
+
+        setupInteractions(canvas, wglp, zoomRectLine, plotInfo); // Interactions on main canvas only
 
         if (canvas.width > 0 && canvas.height > 0) {
             wglp.viewport(0, 0, canvas.width, canvas.height);
-        } else { console.error(`Canvas ${metricName} has zero dimensions AFTER setup.`); }
+        } else { console.error(`Main canvas ${metricName} has zero dimensions AFTER setup.`); }
 
     } else {
+        // --- Plot state exists, ensure elements and context are valid ---
         wglp = plotInfo.wglp; zoomRectLine = plotInfo.zoomRectLine;
+        canvas = plotInfo.canvas; // Get main canvas from state
+        yAxisCanvas = plotInfo.yAxisCanvas;
+        xAxisCanvas = plotInfo.xAxisCanvas;
+
         if (!wrapper) {
-            console.error(`Plot state exists for ${metricName} but wrapper element not found. Cannot update.`);
-            removePlot(metricName); return;
+             console.error(`Plot state exists for ${metricName} but wrapper element not found. Cannot update.`);
+             removePlot(metricName); return;
         }
+         // Ensure correct parent group
         if (wrapper.parentNode !== parentElement) {
             console.warn(`Moving existing plot ${metricName} to new group parent.`);
             parentElement.appendChild(wrapper);
         }
-        if (!wglp) {
-            console.error(`Plot state exists for ${metricName} but wglp is missing. Re-initializing.`);
-            needsInitialization = true;
-            canvas = wrapper.querySelector('canvas');
-            if (!canvas) { console.error("Cannot re-initialize plot: canvas missing."); removePlot(metricName); return; }
-            wglp = new WebglPlot(canvas);
-            zoomRectLine = new WebglLine(new ColorRGBA(0.9, 0.9, 0.9, 0.7), 4);
-            zoomRectLine.loop = true; zoomRectLine.xy = new Float32Array(8).fill(0); zoomRectLine.visible = false;
-            wglp.addLine(zoomRectLine);
-            plotInfo.wglp = wglp; plotInfo.zoomRectLine = zoomRectLine;
-            plotInfo.lines = {}; plotInfo.isInitialLoad = true;
-            setupInteractions(canvas, wglp, zoomRectLine, plotInfo);
-            if (canvas.width > 0 && canvas.height > 0) { wglp.viewport(0, 0, canvas.width, canvas.height); }
+        // Check if canvases or contexts are missing (e.g., after error or structure change)
+        if (!canvas || !yAxisCanvas || !xAxisCanvas || !plotInfo.ctxX || !plotInfo.ctxY || !wglp) {
+            console.error(`Plot state for ${metricName} is incomplete (missing canvas/context/wglp). Re-initializing.`);
+            // Clear existing potentially bad state
+            delete activePlots[metricName];
+            // Remove the old wrapper fully before recreating
+            if (wrapper.parentNode) parentElement.removeChild(wrapper);
+             // Recurse or call a dedicated rebuild function
+             createOrUpdatePlot(metricName, plotDataForMetric, parentElement);
+             return; // Stop current execution
         }
     }
 
+    // --- Update stored range and potentially reset view ---
     plotInfo.minStep = overallMinStep; plotInfo.maxStep = overallMaxStep;
     plotInfo.minY = overallMinY; plotInfo.maxY = overallMaxY;
 
@@ -552,86 +803,96 @@ function createOrUpdatePlot(metricName, plotDataForMetric, parentElement) {
         plotInfo.isInitialLoad = false;
     }
 
+    // Ensure wrapper is visible if it was hidden
     if (wrapper && wrapper.style.display === 'none') { wrapper.style.display = ''; }
 
-    // --- Update Lines ---
+    // --- Update Lines (Keep existing logic) ---
+    // ... (The logic for adding/updating/removing WebglLine instances) ...
     const existingRunsInPlotLines = Object.keys(plotInfo.lines);
     const currentRunsForMetric = Object.keys(plotDataForMetric).filter(runName => selectedRuns.includes(runName));
 
+    // Hide lines for runs no longer selected for this metric
     existingRunsInPlotLines.forEach(runName => {
         if (!currentRunsForMetric.includes(runName)) {
-            if (plotInfo.lines[runName]) { plotInfo.lines[runName].visible = false; }
+            if (plotInfo.lines[runName]) {
+                plotInfo.lines[runName].visible = false;
+                 // Optional: Remove from wglp if line counts get very large and performance suffers
+                 // try { plotInfo.wglp.removeLine(plotInfo.lines[runName]); } catch(e) {}
+                 // delete plotInfo.lines[runName];
+            }
         }
     });
 
+    // Add or update lines for currently selected runs
     currentRunsForMetric.forEach(runName => {
         const runData = plotDataForMetric[runName];
         if (!runData || !runData.steps || runData.steps.length === 0 || runData.steps.length !== runData.values.length) {
             if (plotInfo.lines[runName]) { plotInfo.lines[runName].visible = false; }
-            if (runData && runData.steps && runData.values && runData.steps.length !== runData.values.length) {
-                 console.warn(`Step/value length mismatch for ${metricName}/${runName}. Hiding line.`);
-            }
-            return;
-        }
+             if (runData && runData.steps && runData.values && runData.steps.length !== runData.values.length) {
+                  console.warn(`Step/value length mismatch for ${metricName}/${runName}. Hiding line.`);
+             }
+             return;
+         }
 
-        let line = plotInfo.lines[runName];
-        const numPoints = runData.steps.length;
-        const color = getRunColor(runName);
+         let line = plotInfo.lines[runName];
+         const numPoints = runData.steps.length;
+         const color = getRunColor(runName);
 
-        if (!line) {
-            line = new WebglLine(color, numPoints);
-            plotInfo.lines[runName] = line;
-            wglp.addLine(line);
-        } else if (line.numPoints !== numPoints && numPoints > 0) { // Handle point count change, only if new count > 0
-             console.warn(`Point count changed for ${metricName}/${runName} (${line.numPoints} -> ${numPoints}). Recreating line.`);
-             // Temporarily remove from wglp if possible, or just hide
-             line.visible = false; // Hide old one
-             // If wglp had removeLine: try { wglp.removeLine(line); } catch(e){}
+         // --- Filter NaNs/Infs BEFORE creating/updating line ---
+         const xyData = new Float32Array(numPoints * 2);
+         let validPointCount = 0;
+         for (let i = 0; i < numPoints; i++) {
+             const step = runData.steps[i];
+             const value = runData.values[i];
+             if (isFinite(step) && isFinite(value)) {
+                 xyData[validPointCount * 2] = step;
+                 xyData[validPointCount * 2 + 1] = value;
+                 validPointCount++;
+             }
+         }
+         // --- End Filter ---
 
-             line = new WebglLine(color, numPoints); // Create new
+         if (validPointCount === 0) {
+             // If no valid points, ensure line is hidden
+             if (line) line.visible = false;
+             if (numPoints > 0) console.warn(`All data points for ${metricName}/${runName} were non-finite. Hiding line.`);
+             return; // Skip line creation/update
+         }
+
+         // Use validPointCount for line creation/update
+         const finalXYData = xyData.slice(0, validPointCount * 2);
+
+         if (!line) {
+             // Create new line with correct number of valid points
+             line = new WebglLine(color, validPointCount);
+             plotInfo.lines[runName] = line;
+             wglp.addLine(line);
+         } else if (line.numPoints !== validPointCount) {
+             // If valid point count changes, recreate the line object
+             // (WebglLine doesn't support changing numPoints after creation)
+             console.log(`Valid point count changed for ${metricName}/${runName} (${line.numPoints} -> ${validPointCount}). Recreating line.`);
+             // Remove the old line from WebGL context before creating new one
+             try {
+                 const lineIndex = wglp.linesData.indexOf(line);
+                 if (lineIndex > -1) {
+                     wglp.linesData.splice(lineIndex, 1);
+                 }
+             } catch (e) {
+                 console.warn(`Could not remove old line for ${metricName}/${runName} during recreation:`, e);
+             }
+
+             line = new WebglLine(color, validPointCount); // Create new with correct size
              plotInfo.lines[runName] = line; // Update map
              wglp.addLine(line); // Add new one
-        } else if (numPoints === 0 && line) { // If new data is empty, hide existing line
-             line.visible = false;
-             return; // Skip data update
-        } else if (line) {
-             // Ensure color is up-to-date if line exists
-             line.color = color;
-        }
+         } else {
+             // Num points is the same, just update color and data
+             line.color = color; // Ensure color is up-to-date
+         }
 
-
-        // Update line data (filtering NaNs)
-        const xyData = new Float32Array(numPoints * 2);
-        let validPointCount = 0;
-        for (let i = 0; i < numPoints; i++) {
-            const step = runData.steps[i];
-            const value = runData.values[i];
-            if (isFinite(step) && isFinite(value)) {
-                xyData[validPointCount * 2] = step;
-                xyData[validPointCount * 2 + 1] = value;
-                validPointCount++;
-            }
-        }
-
-        if (validPointCount > 0) {
-             // Recreate line buffer only if the *valid* point count changes significantly
-             // This avoids excessive buffer recreation if only a few NaNs appear/disappear
-             if (line.numPoints !== validPointCount) {
-                  console.warn(`Filtered point count changed significantly for ${metricName}/${runName} (${line.numPoints} -> ${validPointCount}). Recreating line.`);
-                  line.visible = false; // Hide old one
-                  line = new WebglLine(color, validPointCount);
-                  plotInfo.lines[runName] = line;
-                  wglp.addLine(line);
-             }
-            line.xy = xyData.slice(0, validPointCount * 2);
-            line.visible = true;
-        } else {
-            line.visible = false;
-            if (numPoints > 0) {
-                console.warn(`All data points for ${metricName}/${runName} were non-finite. Hiding line.`);
-            }
-        }
-    });
+         // Update line data and ensure visible
+         line.xy = finalXYData;
+         line.visible = true;
+     });
 }
 
 function setPlotAxes(wglp, minX, maxX, minY, maxY) {
@@ -659,180 +920,245 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo) {
      let plotOffsetXOld = 0, plotOffsetYOld = 0; // Plot offset state
      let zoomRectStartXNDC = 0, zoomRectStartYNDC = 0; // NDC coords
      const devicePixelRatio = window.devicePixelRatio || 1;
+    // Helper to get MAIN CANVAS dimensions, not the event target's
+    const getMainCanvasRect = () => canvas.getBoundingClientRect();
 
-     const ndcToPlotCoords = (ndcX, ndcY) => {
-        const plotX = Math.abs(wglp.gScaleX) > 1e-9 ? (ndcX - wglp.gOffsetX) / wglp.gScaleX : 0;
-        const plotY = Math.abs(wglp.gScaleY) > 1e-9 ? (ndcY - wglp.gOffsetY) / wglp.gScaleY : 0;
-        return { x: plotX, y: plotY };
-     };
+    const ndcToPlotCoords = (ndcX, ndcY) => {
+       const plotX = Math.abs(wglp.gScaleX) > 1e-9 ? (ndcX - wglp.gOffsetX) / wglp.gScaleX : 0;
+       const plotY = Math.abs(wglp.gScaleY) > 1e-9 ? (ndcY - wglp.gOffsetY) / wglp.gScaleY : 0;
+       return { x: plotX, y: plotY };
+    };
 
-     const screenToPlotCoords = (screenX, screenY) => {
-        const ndcX = (2 * (screenX * devicePixelRatio - canvas.width / 2)) / canvas.width;
-        const ndcY = (-2 * (screenY * devicePixelRatio - canvas.height / 2)) / canvas.height;
-        return ndcToPlotCoords(ndcX, ndcY);
-     };
+    const screenToPlotCoords = (screenX, screenY) => {
+       // Get the main canvas dimensions and position dynamically
+       // This is important if the wrapper/grid shifts things
+       const mainCanvasRect = getMainCanvasRect();
+       if (!mainCanvasRect || mainCanvasRect.width <= 0 || mainCanvasRect.height <= 0) {
+           console.warn("Main canvas rect invalid during screenToPlotCoords");
+           return { x: NaN, y: NaN }; // Invalid coordinates
+       }
+
+       // Calculate offset relative to the main canvas, not the event target
+       const offsetX = screenX - mainCanvasRect.left;
+       const offsetY = screenY - mainCanvasRect.top;
+
+       // Use main canvas width/height for NDC calculation
+       const ndcX = (2 * (offsetX * devicePixelRatio - canvas.width / 2)) / canvas.width;
+       const ndcY = (-2 * (offsetY * devicePixelRatio - canvas.height / 2)) / canvas.height;
+       return ndcToPlotCoords(ndcX, ndcY);
+    };
 
      canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
-     canvas.addEventListener('dblclick', (e) => {
-        e.preventDefault();
-        if (plotInfo && isFinite(plotInfo.minStep) && isFinite(plotInfo.maxStep) && isFinite(plotInfo.minY) && isFinite(plotInfo.maxY)) {
-            setPlotAxes(wglp, plotInfo.minStep, plotInfo.maxStep, plotInfo.minY, plotInfo.maxY);
-        } else {
-            console.warn("Cannot reset plot axes: Stored range data missing or invalid.", plotInfo);
-        }
-        zoomRectLine.visible = false;
-     });
-
-     canvas.addEventListener('mousedown', (e) => {
-        e.preventDefault(); canvas.focus();
-        const currentNdcX = (2 * (e.offsetX * devicePixelRatio - canvas.width / 2)) / canvas.width;
-        const currentNdcY = (-2 * (e.offsetY * devicePixelRatio - canvas.height / 2)) / canvas.height;
-
-        if (e.button === 0) { // Left Click: Start Zoom Rect
-            isZoomingRect = true; isDragging = false;
-            zoomRectStartXNDC = currentNdcX; zoomRectStartYNDC = currentNdcY;
-            try {
-                const startPlotCoords = ndcToPlotCoords(zoomRectStartXNDC, zoomRectStartYNDC);
-                 if (!isFinite(startPlotCoords.x) || !isFinite(startPlotCoords.y)) throw new Error("Invalid start plot coords");
-                 zoomRectLine.xy = new Float32Array([ startPlotCoords.x, startPlotCoords.y, startPlotCoords.x, startPlotCoords.y, startPlotCoords.x, startPlotCoords.y, startPlotCoords.x, startPlotCoords.y, ]);
-                 zoomRectLine.visible = true; canvas.style.cursor = 'crosshair';
-            } catch (convErr) { console.error("Error starting zoom rect:", convErr); isZoomingRect = false; zoomRectLine.visible = false; canvas.style.cursor = 'grab'; }
-        } else if (e.button === 2) { // Right Click: Start Pan
-            isDragging = true; isZoomingRect = false; zoomRectLine.visible = false;
-            dragStartX = e.clientX; dragStartY = e.clientY;
-            plotOffsetXOld = wglp.gOffsetX; plotOffsetYOld = wglp.gOffsetY;
-            canvas.style.cursor = 'grabbing';
-        }
-     });
-
-    canvas.addEventListener('mousemove', (e) => {
-        if (!isDragging && !isZoomingRect) { canvas.style.cursor = 'grab'; return; }
-        e.preventDefault();
-         const currentNdcX = (2 * (e.offsetX * devicePixelRatio - canvas.width / 2)) / canvas.width;
-         const currentNdcY = (-2 * (e.offsetY * devicePixelRatio - canvas.height / 2)) / canvas.height;
-
-        if (isDragging) {
-            const dx = (e.clientX - dragStartX) * devicePixelRatio; const dy = (e.clientY - dragStartY) * devicePixelRatio;
-            const deltaOffsetX = (Math.abs(wglp.gScaleX) > 1e-9) ? (dx / canvas.width) * 2 / wglp.gScaleX : 0;
-            const deltaOffsetY = (Math.abs(wglp.gScaleY) > 1e-9) ? (-dy / canvas.height) * 2 / wglp.gScaleY : 0;
-            wglp.gOffsetX = plotOffsetXOld + deltaOffsetX; wglp.gOffsetY = plotOffsetYOld + deltaOffsetY;
-            canvas.style.cursor = 'grabbing';
-        } else if (isZoomingRect) {
-             try {
-                const startPlot = ndcToPlotCoords(zoomRectStartXNDC, zoomRectStartYNDC);
-                const currentPlot = ndcToPlotCoords(currentNdcX, currentNdcY);
-                 if (!isFinite(startPlot.x) || !isFinite(startPlot.y) || !isFinite(currentPlot.x) || !isFinite(currentPlot.y)) { throw new Error("Invalid plot coords during zoom rect move"); }
-                zoomRectLine.xy = new Float32Array([ startPlot.x, startPlot.y, currentPlot.x, startPlot.y, currentPlot.x, currentPlot.y, startPlot.x, currentPlot.y ]);
-                zoomRectLine.visible = true;
-            } catch (convErr) { console.error("Error updating zoom rect:", convErr); }
-            canvas.style.cursor = 'crosshair';
-        }
+    canvas.addEventListener('dblclick', (e) => {
+       e.preventDefault();
+       if (plotInfo && isFinite(plotInfo.minStep) && isFinite(plotInfo.maxStep) && isFinite(plotInfo.minY) && isFinite(plotInfo.maxY)) {
+           setPlotAxes(wglp, plotInfo.minStep, plotInfo.maxStep, plotInfo.minY, plotInfo.maxY);
+       } else {
+           console.warn("Cannot reset plot axes: Stored range data missing or invalid.", plotInfo);
+       }
+       zoomRectLine.visible = false;
     });
 
-     canvas.addEventListener('mouseup', (e) => {
-        if (!isDragging && !isZoomingRect) return;
-        e.preventDefault();
-         const endNdcX = (2 * (e.offsetX * devicePixelRatio - canvas.width / 2)) / canvas.width;
-         const endNdcY = (-2 * (e.offsetY * devicePixelRatio - canvas.height / 2)) / canvas.height;
+    canvas.addEventListener('mousedown', (e) => {
+       e.preventDefault(); canvas.focus();
+       // --- Use main canvas dimensions for NDC ---
+       const mainCanvasRect = getMainCanvasRect();
+       if (!mainCanvasRect) return;
+       const offsetX = e.clientX - mainCanvasRect.left;
+       const offsetY = e.clientY - mainCanvasRect.top;
+       const currentNdcX = (2 * (offsetX * devicePixelRatio - canvas.width / 2)) / canvas.width;
+       const currentNdcY = (-2 * (offsetY * devicePixelRatio - canvas.height / 2)) / canvas.height;
+       // --- End NDC calculation change ---
 
-        if (isDragging) { isDragging = false; canvas.style.cursor = 'grab'; }
-        else if (isZoomingRect) {
-            isZoomingRect = false; zoomRectLine.visible = false; canvas.style.cursor = 'grab';
-            const minDragThresholdNDC = 0.02;
-            if (Math.abs(endNdcX - zoomRectStartXNDC) > minDragThresholdNDC || Math.abs(endNdcY - zoomRectStartYNDC) > minDragThresholdNDC) {
-                 try {
-                     const startPlot = ndcToPlotCoords(zoomRectStartXNDC, zoomRectStartYNDC); const endPlot = ndcToPlotCoords(endNdcX, endNdcY);
-                     if (!isFinite(startPlot.x) || !isFinite(startPlot.y) || !isFinite(endPlot.x) || !isFinite(endPlot.y)) { throw new Error("Invalid plot coords for zoom calculation"); }
-                     const minPlotX = Math.min(startPlot.x, endPlot.x); const maxPlotX = Math.max(startPlot.x, endPlot.x);
-                     const minPlotY = Math.min(startPlot.y, endPlot.y); const maxPlotY = Math.max(startPlot.y, endPlot.y);
-                     const centerX = (minPlotX + maxPlotX) / 2; const centerY = (minPlotY + maxPlotY) / 2;
-                     const rangeX = maxPlotX - minPlotX; const rangeY = maxPlotY - minPlotY;
-                     if (rangeX > 1e-9 && rangeY > 1e-9) {
-                         let newScaleX = 2 / rangeX; let newScaleY = 2 / rangeY;
-                         newScaleX = Math.max(1e-6, Math.min(1e6, newScaleX)); newScaleY = Math.max(1e-6, Math.min(1e6, newScaleY));
-                         wglp.gScaleX = newScaleX; wglp.gScaleY = newScaleY;
-                         wglp.gOffsetX = -centerX * wglp.gScaleX; wglp.gOffsetY = -centerY * wglp.gScaleY;
-                     } else { console.warn("Zoom range too small or invalid, zoom cancelled."); }
-                 } catch (convErr) { console.error("Error performing zoom:", convErr); }
-            }
-        }
-     });
+       if (e.button === 0) { // Left Click: Start Zoom Rect
+           isZoomingRect = true; isDragging = false;
+           zoomRectStartXNDC = currentNdcX; zoomRectStartYNDC = currentNdcY;
+           try {
+               const startPlotCoords = ndcToPlotCoords(zoomRectStartXNDC, zoomRectStartYNDC);
+                if (!isFinite(startPlotCoords.x) || !isFinite(startPlotCoords.y)) throw new Error("Invalid start plot coords");
+                zoomRectLine.xy = new Float32Array([ startPlotCoords.x, startPlotCoords.y, startPlotCoords.x, startPlotCoords.y, startPlotCoords.x, startPlotCoords.y, startPlotCoords.x, startPlotCoords.y, ]);
+                zoomRectLine.visible = true; canvas.style.cursor = 'crosshair';
+           } catch (convErr) { console.error("Error starting zoom rect:", convErr); isZoomingRect = false; zoomRectLine.visible = false; canvas.style.cursor = 'grab'; }
+       } else if (e.button === 2) { // Right Click: Start Pan
+           isDragging = true; isZoomingRect = false; zoomRectLine.visible = false;
+           dragStartX = e.clientX; // Use clientX/Y for panning delta calculation
+           dragStartY = e.clientY;
+           plotOffsetXOld = wglp.gOffsetX; plotOffsetYOld = wglp.gOffsetY;
+           canvas.style.cursor = 'grabbing';
+       }
+    });
+
+   canvas.addEventListener('mousemove', (e) => {
+       if (!isDragging && !isZoomingRect) { canvas.style.cursor = 'grab'; return; }
+       e.preventDefault();
+        // --- Use main canvas dimensions for NDC ---
+        const mainCanvasRect = getMainCanvasRect();
+        if (!mainCanvasRect) return;
+        const offsetX = e.clientX - mainCanvasRect.left;
+        const offsetY = e.clientY - mainCanvasRect.top;
+        const currentNdcX = (2 * (offsetX * devicePixelRatio - canvas.width / 2)) / canvas.width;
+        const currentNdcY = (-2 * (offsetY * devicePixelRatio - canvas.height / 2)) / canvas.height;
+        // --- End NDC calculation change ---
+
+       if (isDragging) {
+           // Panning calculation based on clientX/Y delta is fine
+           const dx = (e.clientX - dragStartX) * devicePixelRatio;
+           const dy = (e.clientY - dragStartY) * devicePixelRatio;
+           // Need main canvas width/height for correct offset delta scaling
+           const deltaOffsetX = (Math.abs(wglp.gScaleX) > 1e-9 && canvas.width > 0) ? (dx / canvas.width) * 2 : 0;
+           const deltaOffsetY = (Math.abs(wglp.gScaleY) > 1e-9 && canvas.height > 0) ? (-dy / canvas.height) * 2 : 0;
+           wglp.gOffsetX = plotOffsetXOld + deltaOffsetX;
+           wglp.gOffsetY = plotOffsetYOld + deltaOffsetY;
+           canvas.style.cursor = 'grabbing';
+       } else if (isZoomingRect) {
+            try {
+               const startPlot = ndcToPlotCoords(zoomRectStartXNDC, zoomRectStartYNDC);
+               const currentPlot = ndcToPlotCoords(currentNdcX, currentNdcY); // Use current NDC
+                if (!isFinite(startPlot.x) || !isFinite(startPlot.y) || !isFinite(currentPlot.x) || !isFinite(currentPlot.y)) { throw new Error("Invalid plot coords during zoom rect move"); }
+               zoomRectLine.xy = new Float32Array([ startPlot.x, startPlot.y, currentPlot.x, startPlot.y, currentPlot.x, currentPlot.y, startPlot.x, currentPlot.y ]);
+               zoomRectLine.visible = true;
+           } catch (convErr) { console.error("Error updating zoom rect:", convErr); }
+           canvas.style.cursor = 'crosshair';
+       }
+   });
+
+    canvas.addEventListener('mouseup', (e) => {
+       if (!isDragging && !isZoomingRect) return;
+       e.preventDefault();
+        // --- Use main canvas dimensions for NDC ---
+        const mainCanvasRect = getMainCanvasRect();
+        if (!mainCanvasRect) return;
+        const offsetX = e.clientX - mainCanvasRect.left;
+        const offsetY = e.clientY - mainCanvasRect.top;
+        const endNdcX = (2 * (offsetX * devicePixelRatio - canvas.width / 2)) / canvas.width;
+        const endNdcY = (-2 * (offsetY * devicePixelRatio - canvas.height / 2)) / canvas.height;
+        // --- End NDC calculation change ---
+
+       if (isDragging) { isDragging = false; canvas.style.cursor = 'grab'; }
+       else if (isZoomingRect) {
+           isZoomingRect = false; zoomRectLine.visible = false; canvas.style.cursor = 'grab';
+           const minDragThresholdNDC = 0.02;
+           if (Math.abs(endNdcX - zoomRectStartXNDC) > minDragThresholdNDC || Math.abs(endNdcY - zoomRectStartYNDC) > minDragThresholdNDC) {
+                try {
+                    const startPlot = ndcToPlotCoords(zoomRectStartXNDC, zoomRectStartYNDC); const endPlot = ndcToPlotCoords(endNdcX, endNdcY);
+                    if (!isFinite(startPlot.x) || !isFinite(startPlot.y) || !isFinite(endPlot.x) || !isFinite(endPlot.y)) { throw new Error("Invalid plot coords for zoom calculation"); }
+                    const minPlotX = Math.min(startPlot.x, endPlot.x); const maxPlotX = Math.max(startPlot.x, endPlot.x);
+                    const minPlotY = Math.min(startPlot.y, endPlot.y); const maxPlotY = Math.max(startPlot.y, endPlot.y);
+                    const centerX = (minPlotX + maxPlotX) / 2; const centerY = (minPlotY + maxPlotY) / 2;
+                    const rangeX = maxPlotX - minPlotX; const rangeY = maxPlotY - minPlotY;
+                    if (rangeX > 1e-9 && rangeY > 1e-9) {
+                        let newScaleX = 2 / rangeX; let newScaleY = 2 / rangeY;
+                        newScaleX = Math.max(1e-6, Math.min(1e6, newScaleX)); newScaleY = Math.max(1e-6, Math.min(1e6, newScaleY));
+                        // Calculate new offsets based on the *center* of the zoom rectangle
+                        const newOffsetX = -centerX * newScaleX;
+                        const newOffsetY = -centerY * newScaleY;
+
+                        wglp.gScaleX = newScaleX; wglp.gScaleY = newScaleY;
+                        wglp.gOffsetX = newOffsetX; wglp.gOffsetY = newOffsetY;
+
+                    } else { console.warn("Zoom range too small or invalid, zoom cancelled."); }
+                } catch (convErr) { console.error("Error performing zoom:", convErr); }
+           }
+       }
+    });
 
     canvas.addEventListener('mouseleave', (e) => {
-        if (isDragging) { isDragging = false; canvas.style.cursor = 'grab'; }
-        if (isZoomingRect) { isZoomingRect = false; zoomRectLine.visible = false; canvas.style.cursor = 'grab'; }
+       if (isDragging) { isDragging = false; canvas.style.cursor = 'grab'; }
+       if (isZoomingRect) { isZoomingRect = false; zoomRectLine.visible = false; canvas.style.cursor = 'grab'; }
     });
 
     canvas.addEventListener('wheel', (e) => {
-        if (e.shiftKey) {
-            e.preventDefault();
-            const zoomFactor = 1.1; const scaleDelta = e.deltaY < 0 ? zoomFactor : 1 / zoomFactor;
-            const cursorNDC_X = (2 * (e.offsetX * devicePixelRatio - canvas.width / 2)) / canvas.width;
-            const cursorNDC_Y = (-2 * (e.offsetY * devicePixelRatio - canvas.height / 2)) / canvas.height;
-            const gScaleXOld = wglp.gScaleX; const gScaleYOld = wglp.gScaleY;
-            let newScaleX = gScaleXOld * scaleDelta; let newScaleY = gScaleYOld * scaleDelta;
-            newScaleX = Math.max(1e-6, Math.min(1e6, newScaleX)); newScaleY = Math.max(1e-6, Math.min(1e6, newScaleY));
-            const actualScaleChangeX = (Math.abs(gScaleXOld) > 1e-9) ? newScaleX / gScaleXOld : 1;
-            const actualScaleChangeY = (Math.abs(gScaleYOld) > 1e-9) ? newScaleY / gScaleYOld : 1;
-            wglp.gOffsetX = cursorNDC_X + (wglp.gOffsetX - cursorNDC_X) * actualScaleChangeX;
-            wglp.gOffsetY = cursorNDC_Y + (wglp.gOffsetY - cursorNDC_Y) * actualScaleChangeY;
-            wglp.gScaleX = newScaleX; wglp.gScaleY = newScaleY;
-        }
+       if (e.shiftKey) {
+           e.preventDefault();
+           const zoomFactor = 1.1; const scaleDelta = e.deltaY < 0 ? zoomFactor : 1 / zoomFactor;
+
+           // --- Use main canvas dimensions for NDC ---
+           const mainCanvasRect = getMainCanvasRect();
+           if (!mainCanvasRect) return;
+           const offsetX = e.clientX - mainCanvasRect.left;
+           const offsetY = e.clientY - mainCanvasRect.top;
+           const cursorNDC_X = (2 * (offsetX * devicePixelRatio - canvas.width / 2)) / canvas.width;
+           const cursorNDC_Y = (-2 * (offsetY * devicePixelRatio - canvas.height / 2)) / canvas.height;
+           // --- End NDC calculation change ---
+
+           const gScaleXOld = wglp.gScaleX; const gScaleYOld = wglp.gScaleY;
+           let newScaleX = gScaleXOld * scaleDelta; let newScaleY = gScaleYOld * scaleDelta;
+           newScaleX = Math.max(1e-6, Math.min(1e6, newScaleX)); newScaleY = Math.max(1e-6, Math.min(1e6, newScaleY));
+           const actualScaleChangeX = (Math.abs(gScaleXOld) > 1e-9) ? newScaleX / gScaleXOld : 1;
+           const actualScaleChangeY = (Math.abs(gScaleYOld) > 1e-9) ? newScaleY / gScaleYOld : 1;
+           wglp.gOffsetX = cursorNDC_X + (wglp.gOffsetX - cursorNDC_X) * actualScaleChangeX;
+           wglp.gOffsetY = cursorNDC_Y + (wglp.gOffsetY - cursorNDC_Y) * actualScaleChangeY;
+           wglp.gScaleX = newScaleX; wglp.gScaleY = newScaleY;
+       }
     }, { passive: false }); // Need passive: false for preventDefault inside wheel
 
-    // --- Basic Touch ---
-     let isPinching = false; let isTouchPanning = false;
-     let touchStartX0 = 0, touchStartY0 = 0;
-     let initialPinchDistance = 0;
-     let touchPlotOffsetXOld = 0, touchPlotOffsetYOld = 0;
-     let initialPinchCenterX = 0, initialPinchCenterY = 0;
+    // --- Touch Interactions (Similar NDC adjustments needed) ---
+    let isPinching = false; let isTouchPanning = false;
+    let touchStartX0 = 0, touchStartY0 = 0;
+    let initialPinchDistance = 0;
+    let touchPlotOffsetXOld = 0, touchPlotOffsetYOld = 0;
+    let initialPinchCenterX = 0, initialPinchCenterY = 0; // In client coordinates
 
     canvas.addEventListener('touchstart', (e) => {
-        e.preventDefault(); zoomRectLine.visible = false;
-        if (e.touches.length === 1) {
-            isTouchPanning = true; isPinching = false; const touch = e.touches[0];
-            touchStartX0 = touch.clientX; touchStartY0 = touch.clientY;
-            touchPlotOffsetXOld = wglp.gOffsetX; touchPlotOffsetYOld = wglp.gOffsetY;
-        } else if (e.touches.length === 2) {
-            isPinching = true; isTouchPanning = false; const t0 = e.touches[0]; const t1 = e.touches[1];
-             initialPinchCenterX = (t0.clientX + t1.clientX) / 2; initialPinchCenterY = (t0.clientY + t1.clientY) / 2;
-             initialPinchDistance = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
-            touchPlotOffsetXOld = wglp.gOffsetX; touchPlotOffsetYOld = wglp.gOffsetY;
-        } else { isTouchPanning = false; isPinching = false; }
+       e.preventDefault(); zoomRectLine.visible = false;
+       if (e.touches.length === 1) {
+           isTouchPanning = true; isPinching = false; const touch = e.touches[0];
+           touchStartX0 = touch.clientX; touchStartY0 = touch.clientY;
+           touchPlotOffsetXOld = wglp.gOffsetX; touchPlotOffsetYOld = wglp.gOffsetY;
+       } else if (e.touches.length === 2) {
+           isPinching = true; isTouchPanning = false; const t0 = e.touches[0]; const t1 = e.touches[1];
+            initialPinchCenterX = (t0.clientX + t1.clientX) / 2; initialPinchCenterY = (t0.clientY + t1.clientY) / 2;
+            initialPinchDistance = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+           touchPlotOffsetXOld = wglp.gOffsetX; touchPlotOffsetYOld = wglp.gOffsetY;
+       } else { isTouchPanning = false; isPinching = false; }
     }, { passive: false });
 
     canvas.addEventListener('touchmove', (e) => {
-        e.preventDefault();
-        if (isTouchPanning && e.touches.length === 1) {
-            const touch = e.touches[0]; const dx = (touch.clientX - touchStartX0) * devicePixelRatio; const dy = (touch.clientY - touchStartY0) * devicePixelRatio;
-            const deltaOffsetX = (Math.abs(wglp.gScaleX) > 1e-9) ? (dx / canvas.width) * 2 / wglp.gScaleX : 0;
-            const deltaOffsetY = (Math.abs(wglp.gScaleY) > 1e-9) ? (-dy / canvas.height) * 2 / wglp.gScaleY : 0;
-            wglp.gOffsetX = touchPlotOffsetXOld + deltaOffsetX; wglp.gOffsetY = touchPlotOffsetYOld + deltaOffsetY;
-        } else if (isPinching && e.touches.length === 2) {
-            const t0 = e.touches[0]; const t1 = e.touches[1];
-            const currentDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
-            const currentCenterX = (t0.clientX + t1.clientX) / 2 * devicePixelRatio; const currentCenterY = (t0.clientY + t1.clientY) / 2 * devicePixelRatio;
-            const scaleDelta = (initialPinchDistance > 1e-6) ? currentDist / initialPinchDistance : 1;
-            const centerNDC_X = (2 * (currentCenterX - canvas.width / 2)) / canvas.width; const centerNDC_Y = (-2 * (currentCenterY - canvas.height / 2)) / canvas.height;
-            const gScaleXOld = wglp.gScaleX; const gScaleYOld = wglp.gScaleY;
-            let newScaleX = gScaleXOld * scaleDelta; let newScaleY = gScaleYOld * scaleDelta;
-            newScaleX = Math.max(1e-6, Math.min(1e6, newScaleX)); newScaleY = Math.max(1e-6, Math.min(1e6, newScaleY));
-            const actualScaleChangeX = (Math.abs(gScaleXOld) > 1e-9) ? newScaleX / gScaleXOld : 1;
-            const actualScaleChangeY = (Math.abs(gScaleYOld) > 1e-9) ? newScaleY / gScaleYOld : 1;
-            wglp.gOffsetX = centerNDC_X + (touchPlotOffsetXOld - centerNDC_X) * actualScaleChangeX;
-            wglp.gOffsetY = centerNDC_Y + (touchPlotOffsetYOld - centerNDC_Y) * actualScaleChangeY;
-            wglp.gScaleX = newScaleX; wglp.gScaleY = newScaleY;
-            // Update state for next move? Debatable, causes potential drift/jerkiness.
-            // initialPinchDistance = currentDist; touchPlotOffsetXOld = wglp.gOffsetX; touchPlotOffsetYOld = wglp.gOffsetY;
-        }
+       e.preventDefault();
+       // --- Get main canvas dimensions ---
+       const mainCanvasRect = getMainCanvasRect();
+       if (!mainCanvasRect) return;
+
+       if (isTouchPanning && e.touches.length === 1) {
+           const touch = e.touches[0]; const dx = (touch.clientX - touchStartX0) * devicePixelRatio; const dy = (touch.clientY - touchStartY0) * devicePixelRatio;
+           // Use main canvas width/height for delta calculation
+           const deltaOffsetX = (Math.abs(wglp.gScaleX) > 1e-9 && canvas.width > 0) ? (dx / canvas.width) * 2 : 0;
+           const deltaOffsetY = (Math.abs(wglp.gScaleY) > 1e-9 && canvas.height > 0) ? (-dy / canvas.height) * 2 : 0;
+           wglp.gOffsetX = touchPlotOffsetXOld + deltaOffsetX; wglp.gOffsetY = touchPlotOffsetYOld + deltaOffsetY;
+       } else if (isPinching && e.touches.length === 2) {
+           const t0 = e.touches[0]; const t1 = e.touches[1];
+           const currentDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+           const currentCenterX = (t0.clientX + t1.clientX) / 2; const currentCenterY = (t0.clientY + t1.clientY) / 2;
+           const scaleDelta = (initialPinchDistance > 1e-6) ? currentDist / initialPinchDistance : 1;
+
+           // --- Convert pinch center to NDC using main canvas ---
+           const centerOffsetX = currentCenterX - mainCanvasRect.left;
+           const centerOffsetY = currentCenterY - mainCanvasRect.top;
+           const centerNDC_X = (2 * (centerOffsetX * devicePixelRatio - canvas.width / 2)) / canvas.width;
+           const centerNDC_Y = (-2 * (centerOffsetY * devicePixelRatio - canvas.height / 2)) / canvas.height;
+           // --- End NDC conversion ---
+
+           const gScaleXOld = wglp.gScaleX; const gScaleYOld = wglp.gScaleY;
+           let newScaleX = gScaleXOld * scaleDelta; let newScaleY = gScaleYOld * scaleDelta;
+           newScaleX = Math.max(1e-6, Math.min(1e6, newScaleX)); newScaleY = Math.max(1e-6, Math.min(1e6, newScaleY));
+           const actualScaleChangeX = (Math.abs(gScaleXOld) > 1e-9) ? newScaleX / gScaleXOld : 1;
+           const actualScaleChangeY = (Math.abs(gScaleYOld) > 1e-9) ? newScaleY / gScaleYOld : 1;
+           wglp.gOffsetX = centerNDC_X + (touchPlotOffsetXOld - centerNDC_X) * actualScaleChangeX;
+           wglp.gOffsetY = centerNDC_Y + (touchPlotOffsetYOld - centerNDC_Y) * actualScaleChangeY;
+           wglp.gScaleX = newScaleX; wglp.gScaleY = newScaleY;
+           // Update state for next move - necessary for smooth pinch-zoom-pan
+           initialPinchDistance = currentDist;
+           touchPlotOffsetXOld = wglp.gOffsetX; // Store the *new* offset
+           touchPlotOffsetYOld = wglp.gOffsetY;
+       }
     }, { passive: false });
 
-     canvas.addEventListener('touchend', (e) => {
-          e.preventDefault();
-          if (e.touches.length < 2) { isPinching = false; }
-          if (e.touches.length < 1) { isTouchPanning = false; }
-     }, { passive: false });
+    canvas.addEventListener('touchend', (e) => {
+         e.preventDefault();
+         if (e.touches.length < 2) { isPinching = false; }
+         if (e.touches.length < 1) { isTouchPanning = false; }
+    }, { passive: false });
 }
 
 
@@ -842,7 +1168,17 @@ function updateDashboard() {
     for (const metricName in activePlots) {
         const plotInfo = activePlots[metricName];
         if (plotInfo && plotInfo.wglp) {
+            // 1. Update the WebGL plot itself
             plotInfo.wglp.update();
+
+            // 2. Update the 2D Axes using the latest scale/offset from WebGL plot
+            const { wglp, ctxX, ctxY, xAxisCanvas, yAxisCanvas } = plotInfo;
+            if (ctxX && xAxisCanvas) {
+                drawAxisX(ctxX, xAxisCanvas.width, xAxisCanvas.height, wglp.gScaleX, wglp.gOffsetX, AXIS_DIVISIONS);
+            }
+            if (ctxY && yAxisCanvas) {
+                drawAxisY(ctxY, yAxisCanvas.width, yAxisCanvas.height, wglp.gScaleY, wglp.gOffsetY, AXIS_DIVISIONS);
+            }
         }
     }
     animationFrameId = requestAnimationFrame(updateDashboard);
@@ -850,22 +1186,43 @@ function updateDashboard() {
 window.addEventListener('resize', () => {
     clearTimeout(window.resizeTimeout);
     window.resizeTimeout = setTimeout(() => {
-        console.log("Resizing plots..."); const devicePixelRatio = window.devicePixelRatio || 1;
+        console.log("Resizing plots and axes...");
+        const devicePixelRatio = window.devicePixelRatio || 1;
+
         for (const metricName in activePlots) {
-             const plotInfo = activePlots[metricName]; if (!plotInfo || !plotInfo.wglp) continue;
-             const wglp = plotInfo.wglp; const canvas = wglp.canvas; if (!canvas) continue;
-             const newWidth = canvas.clientWidth; const newHeight = canvas.clientHeight;
-             if (newWidth > 0 && newHeight > 0) {
+            const plotInfo = activePlots[metricName];
+            if (!plotInfo || !plotInfo.wglp || !plotInfo.canvas) continue;
+
+            const wglp = plotInfo.wglp;
+            const canvas = plotInfo.canvas; // Main WebGL canvas
+
+            // --- Resize Main WebGL Canvas ---
+            const newWidth = canvas.clientWidth;
+            const newHeight = canvas.clientHeight;
+            if (newWidth > 0 && newHeight > 0) {
                 const targetWidth = Math.round(newWidth * devicePixelRatio);
                 const targetHeight = Math.round(newHeight * devicePixelRatio);
                 if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-                    canvas.width = targetWidth; canvas.height = targetHeight;
+                    canvas.width = targetWidth;
+                    canvas.height = targetHeight;
                     wglp.viewport(0, 0, canvas.width, canvas.height);
-                     console.log(`Resized canvas for ${metricName} to ${targetWidth}x${targetHeight}`);
+                    console.log(`Resized main canvas for ${metricName} to ${targetWidth}x${targetHeight}`);
                 }
-             } else { console.warn(`Canvas for ${metricName} client dimensions zero during resize.`); }
+            } else {
+                console.warn(`Main canvas for ${metricName} client dimensions zero during resize.`);
+            }
+
+            // --- Resize Axis Canvases (calls initAxisCanvas internally) ---
+             if (plotInfo.xAxisCanvas && plotInfo.yAxisCanvas) {
+                 sizeAxisCanvases(plotInfo);
+                 console.log(`Resized axis canvases for ${metricName}`);
+             }
+
+             // No need to redraw axes here, the animation loop will handle it immediately after resize
         }
-    }, 250);
+         // Optional: A single redraw call might be slightly cleaner if needed immediately
+         // updateDashboard(); // Call once manually if needed right away
+    }, 250); // Keep debounce
 });
 
 // --- Sidebar Resizer Logic ---
