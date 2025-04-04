@@ -8,8 +8,8 @@
     --bg-light: #2c3138;       /* Hover states, subtle elements */
     --border-color: #353a41;     /* Borders */
     --text-primary: #d1d1d1;   /* Primary text */
-    --text-secondary: #9a9fa6; /* Secondary/muted text */
-    --text-placeholder: #6a7077;
+    --text-secondary: #b0b5bb; /* Lighter secondary text for better contrast */
+    --text-placeholder: #7a8087; /* Adjusted placeholder */
     --accent-primary: #3e92cc; /* Primary accent (blue) */
     --accent-secondary: #68b3e9; /* Lighter accent / hover */
     --error-color: #e55353;
@@ -49,11 +49,11 @@
     --reopen-button-width: 30px;
     --reopen-button-offset: 5px; /* How far from the edge */
 
-    --plot-yaxis-width: 60px; /* Adjust as needed */
-    --plot-xaxis-height: 30px; /* Adjust as needed */
-    --axis-border-color: var(--border-color); /* Use existing border color */
-    --axis-text-color: var(--text-secondary);
-    --axis-font: 10px var(--font-family); /* Smaller font for axes */
+    --plot-yaxis-width: 65px; /* Slightly wider Y axis */
+    --plot-xaxis-height: 35px; /* Slightly taller X axis */
+    --axis-border-color: #40454d; /* Slightly lighter border */
+    --axis-text-color: var(--text-secondary); /* Use the updated secondary color */
+    --axis-font: 25px var(--font-family); /* Increased font size */
 }
 
 /* Basic Reset */
@@ -446,6 +446,13 @@ a:hover, a:focus {
     display: block;
     width: 100%;
     height: 100%;
+}
+
+.plot-yaxis-container,
+.plot-xaxis-container,
+.plot-corner {
+    background-color: var(--bg-medium); /* Keep or adjust if needed */
+    /* border-color: var(--axis-border-color); /* Ensure borders use the updated color if overrides exist */
 }
 
 /* Info Footer in Main Content */

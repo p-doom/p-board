@@ -20,12 +20,12 @@ const plotTooltip = document.getElementById('plot-tooltip'); // Tooltip Element
 
 // --- Configuration ---
 const API_BASE_URL = ''; // <-- NEW: Requests will go to the same origin
-const AXIS_DIVISIONS = 8; // Number of ticks/labels on axes
+const AXIS_DIVISIONS = 7; // Number of ticks/labels on axes
 const AXIS_TEXT_STYLE = {
-    font: getComputedStyle(document.documentElement).getPropertyValue('--axis-font') || '10px sans-serif',
-    fillStyle: getComputedStyle(document.documentElement).getPropertyValue('--axis-text-color') || '#9a9fa6',
-    strokeStyle: getComputedStyle(document.documentElement).getPropertyValue('--axis-text-color') || '#9a9fa6',
-    tickSize: 5,
+    font: getComputedStyle(document.documentElement).getPropertyValue('--axis-font') || '11px sans-serif', // Reflect potential CSS change
+    fillStyle: getComputedStyle(document.documentElement).getPropertyValue('--axis-text-color') || '#b0b5bb', // Reflect potential CSS change
+    strokeStyle: getComputedStyle(document.documentElement).getPropertyValue('--axis-text-color') || '#b0b5bb', // Match fill for ticks
+    tickSize: 6, // Slightly larger ticks
 };
 const TOOLTIP_CLOSENESS_THRESHOLD_PX_SQ = 15 * 15; // Squared pixel distance threshold for tooltip activation
 
