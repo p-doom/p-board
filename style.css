@@ -297,9 +297,114 @@ a:hover, a:focus {
 
 /* Dashboard Grid */
 #dashboard-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); /* Responsive grid */
+    /* display: grid; */ /* REMOVE or COMMENT OUT this line */
+    /* grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); */ /* REMOVE or COMMENT OUT this line */
+    /* gap: var(--spacing-lg); */ /* REMOVE or COMMENT OUT this line */
+    display: flex; /* Use flexbox for vertical stacking */
+    flex-direction: column;
+    gap: var(--spacing-lg); /* Keep the gap between groups */
+}
+
+.metric-group {
+    background-color: var(--bg-medium); /* Optional: slight bg tint */
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    /* box-shadow: var(--box-shadow); */ /* Optional: Shadow on groups */
+    overflow: hidden; /* Contain elements */
+    margin-bottom: var(--spacing-lg); /* Space between groups */
+}
+
+.metric-group-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--spacing-sm) var(--spacing-md);
+    background-color: var(--bg-light); /* Header background */
+    border-bottom: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+}
+
+.metric-group-header:hover {
+    background-color: hsl(from var(--bg-light) h s calc(l + 5%)); /* Slightly lighter on hover */
+}
+
+
+.metric-group-header h3 {
+    font-size: var(--font-size-medium);
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+    flex-grow: 1; /* Take available space */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.toggle-button {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 1.2em; /* Adjust size */
+    padding: 0 var(--spacing-sm);
+    line-height: 1;
+    transition: transform var(--transition-fast);
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+/* Simple +/- icon using pseudo-elements */
+.toggle-button::before {
+    content: '−'; /* Minus sign for expanded */
+    display: inline-block;
+    width: 1em;
+    text-align: center;
+}
+
+.metric-group.collapsed .toggle-button::before {
+    content: '+'; /* Plus sign for collapsed */
+}
+
+/* Alternative: Rotate a chevron (requires an element like <i> or <span>) */
+/* .toggle-button .icon-chevron {
+    display: inline-block;
+    transition: transform 0.2s ease-in-out;
+}
+.metric-group.collapsed .toggle-button .icon-chevron {
+    transform: rotate(-90deg);
+} */
+
+/* Focus style for the button */
+.toggle-button:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 1px;
+    border-radius: 3px;
+}
+
+
+.metric-group-plots {
+    display: grid; /* Use grid for plots WITHIN a group */
+    grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); /* Responsive grid for plots */
     gap: var(--spacing-lg);
+    padding: var(--spacing-lg);
+    transition: opacity var(--transition-medium); /* Add transition for hide/show */
+}
+
+/* Style for collapsed state */
+.metric-group.collapsed .metric-group-plots {
+    display: none; /* Hide the plot container */
+    /* Optionally add animation */
+    /* max-height: 0;
+    overflow: hidden;
+    padding-top: 0;
+    padding-bottom: 0;
+    opacity: 0;
+    transition: max-height 0.3s ease-out, padding 0.3s ease-out, opacity 0.2s ease-out; */
+}
+
+/* Ensure plot wrappers don't add extra margin when inside a group */
+.metric-group-plots .plot-wrapper {
+    margin-bottom: 0; /* Remove bottom margin if set previously */
 }
 
 .placeholder-text {

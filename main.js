@@ -199,23 +199,159 @@ function updatePlots(metricsData) {
     const currentMetricNames = Object.keys(metricsData);
     const existingMetricNames = Object.keys(activePlots);
 
-    // 1. Remove plots for metrics no longer present in the data
+    // Remove plots for metrics entirely gone from the latest data
     existingMetricNames.forEach(metricName => {
         if (!currentMetricNames.includes(metricName)) {
+            console.log(`Removing plot (metric no longer present): ${metricName}`);
             removePlot(metricName);
         }
     });
 
-    // 2. Create/Update plots for current metrics
+    // *** MODIFIED GROUPING LOGIC START ***
+    const metricGroups = {};
+    const defaultGroupName = 'General'; // Name for metrics without a '/' prefix
+
     currentMetricNames.forEach(metricName => {
-        const plotDataForMetric = metricsData[metricName]; // { runName: { steps, values, ... } }
-        createOrUpdatePlot(metricName, plotDataForMetric);
+        let groupName;
+        const slashIndex = metricName.indexOf('/'); // Find the first slash
+
+        if (slashIndex !== -1) {
+            // Contains a slash, take the part *before* the first one
+            groupName = metricName.substring(0, slashIndex);
+        } else {
+            // No slash found, assign to the default group
+            groupName = defaultGroupName;
+        }
+
+        // Ensure the group array exists and add the metric name
+        if (!metricGroups[groupName]) {
+            metricGroups[groupName] = [];
+        }
+        metricGroups[groupName].push(metricName);
+    });
+    // *** MODIFIED GROUPING LOGIC END ***
+
+    // --- Remove Empty Group Containers ---
+    const currentGroupContainerIds = Array.from(dashboardContainer.querySelectorAll('.metric-group')).map(el => el.id);
+    currentGroupContainerIds.forEach(groupId => {
+        const groupNameFromId = groupId.replace('metric-group-', '');
+        // If a group container exists in the DOM but is NOT in our calculated metricGroups, remove it
+        if (!(groupNameFromId in metricGroups)) {
+            const groupContainerToRemove = document.getElementById(groupId);
+            if (groupContainerToRemove) {
+                console.log(`Removing empty metric group container: ${groupNameFromId}`);
+                dashboardContainer.removeChild(groupContainerToRemove);
+                // Also remove associated plots from activePlots if they weren't caught earlier?
+                // This part might be redundant if the first loop in updatePlots already removed them.
+            }
+        }
+    });
+    // --- End Remove Empty Group Containers ---
+
+    // Create or update tabs for each metric group, sorting alphabetically
+    // Make sure the 'General' group (or default) appears last or first if desired
+    const sortedGroupNames = Object.keys(metricGroups).sort((a, b) => {
+        if (a === defaultGroupName) return 1; // Push default group towards the end
+        if (b === defaultGroupName) return -1;
+        return a.localeCompare(b); // Alphabetical sort for others
     });
 
-    // 3. Hide plots that exist but have no data in the current selection (Handled within createOrUpdatePlot logic)
-    // The logic inside createOrUpdatePlot already handles hiding lines if a run doesn't have data for that metric
+    sortedGroupNames.forEach(groupName => {
+        createOrUpdateMetricGroupTab(groupName, metricGroups[groupName], metricsData);
+    });
 
-     console.log("Plot update finished.");
+    console.log("Plot update finished.");
+}
+
+function createOrUpdateMetricGroupTab(groupName, metricNames, metricsData) {
+    const groupContainerId = `metric-group-${groupName}`;
+    let groupContainer = document.getElementById(groupContainerId);
+    let plotsContainer; // Define plotsContainer variable
+
+    if (!groupContainer) {
+        // Create a new group container if it doesn't exist
+        groupContainer = document.createElement('div');
+        groupContainer.id = groupContainerId;
+        groupContainer.className = 'metric-group'; // Initially expanded
+
+        const header = document.createElement('div');
+        header.className = 'metric-group-header';
+        // Add title attribute for full name on hover
+        header.innerHTML = `<h3 title="${groupName}">${groupName}</h3><button class="toggle-button" aria-expanded="true" aria-controls="plots-${groupName}"></button>`;
+        header.addEventListener('click', () => {
+            const isCollapsed = groupContainer.classList.toggle('collapsed');
+            header.querySelector('button').setAttribute('aria-expanded', !isCollapsed);
+        });
+
+        plotsContainer = document.createElement('div'); // Assign here
+        plotsContainer.className = 'metric-group-plots';
+        plotsContainer.id = `plots-${groupName}`; // Add ID for aria-controls
+
+        groupContainer.appendChild(header);
+        groupContainer.appendChild(plotsContainer);
+        dashboardContainer.appendChild(groupContainer); // Add to main dashboard
+        console.log(`Created metric group container: ${groupName}`);
+    } else {
+        // If group container exists, find its plots container
+        plotsContainer = groupContainer.querySelector('.metric-group-plots');
+        if (!plotsContainer) {
+            // Safety check: If somehow plots container is missing, recreate it
+            console.warn(`Plots container missing for group ${groupName}. Recreating.`);
+            plotsContainer = document.createElement('div');
+            plotsContainer.className = 'metric-group-plots';
+            plotsContainer.id = `plots-${groupName}`;
+            groupContainer.appendChild(plotsContainer); // Append to existing group container
+        }
+        // Ensure header title is up-to-date (might not change often, but safe)
+        const headerH3 = groupContainer.querySelector('.metric-group-header h3');
+        if (headerH3) headerH3.title = groupName;
+    }
+
+    // Create or update plots for each metric in the group
+    metricNames.forEach(metricName => {
+        const plotDataForMetric = metricsData[metricName];
+        // *** Pass plotsContainer as the third argument ***
+        createOrUpdatePlot(metricName, plotDataForMetric, plotsContainer);
+    });
+
+    // --- Clean up plots no longer in this specific group ---
+    // Get all plot wrappers currently inside *this* group's plotsContainer
+    const currentPlotWrappersInGroup = Array.from(plotsContainer.children);
+
+    currentPlotWrappersInGroup.forEach(wrapperElement => {
+        // *** Get the original metricName from the data attribute ***
+        const existingMetricNameInGroup = wrapperElement.dataset.metricName;
+        if (existingMetricNameInGroup) {
+            // If a plot wrapper inside this group corresponds to a metric
+            // that is NOT in the 'metricNames' list for *this specific group* anymore, remove it.
+            if (!metricNames.includes(existingMetricNameInGroup)) {
+                console.log(`Removing plot ${existingMetricNameInGroup} from group ${groupName} as it no longer belongs.`);
+                // Directly remove the element since we have it, no need to call removePlot which deletes from activePlots too soon
+                try {
+                    plotsContainer.removeChild(wrapperElement);
+                    // Now also remove from the global activePlots if it was removed from its *last* group
+                    // Check if this metric still exists in *any* group
+                    const stillExistsInAnyGroup = Object.values(metricGroups).flat().includes(existingMetricNameInGroup);
+                    if (!stillExistsInAnyGroup && activePlots[existingMetricNameInGroup]) {
+                        delete activePlots[existingMetricNameInGroup];
+                        console.log(`Deleted ${existingMetricNameInGroup} from activePlots as it was removed from its last group.`);
+                    }
+                } catch (e) {
+                    console.warn(`Error removing plot wrapper ${wrapperElement.id} from group ${groupName}:`, e);
+                }
+            }
+        } else {
+            console.warn("Found element in plots container with unexpected ID or missing data-metric-name:", wrapperElement.id);
+            // *** Add a check to remove the element if it's missing the data attribute ***
+            try {
+                plotsContainer.removeChild(wrapperElement);
+                console.warn(`Removed orphaned plot wrapper ${wrapperElement.id} from group ${groupName}.`);
+            } catch (e) {
+                console.warn(`Error removing orphaned plot wrapper ${wrapperElement.id} from group ${groupName}:`, e);
+            }
+        }
+    });
+    // --- End cleanup ---
 }
 
 function removePlot(metricName) {
@@ -223,72 +359,82 @@ function removePlot(metricName) {
     if (plotInfo) {
         const plotContainerId = `plot-wrapper-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`;
         const plotWrapper = document.getElementById(plotContainerId);
-        if (plotWrapper) {
+
+        // Remove the DOM element if it exists and has a parent
+        if (plotWrapper && plotWrapper.parentNode) {
             try {
-                // Attempt to remove child, might already be detached in some cases
-                 if (plotWrapper.parentNode === dashboardContainer) {
-                     dashboardContainer.removeChild(plotWrapper);
-                 }
+                // *** Remove from its actual parent ***
+                plotWrapper.parentNode.removeChild(plotWrapper);
             } catch (e) {
-                 console.warn(`Error removing plot wrapper for ${metricName}:`, e)
+                console.warn(`Error removing plot wrapper DOM element for ${metricName}:`, e);
             }
+        } else if (plotWrapper) {
+            console.warn(`Plot wrapper for ${metricName} found but has no parent during removal.`);
+        } else {
+            // console.log(`Plot wrapper DOM element for ${metricName} not found during removal (might have been removed by group cleanup).`);
         }
-        // Clean up WebGL resources if possible/needed by library (often GC is enough)
-        // wglp.clear() or similar might be needed if library provides it
+
+        // TODO: Clean up WebGL resources if the library provides a method
+        // Example: if (plotInfo.wglp && typeof plotInfo.wglp.dispose === 'function') {
+        //     plotInfo.wglp.dispose();
+        // }
+
+        // Remove from the active plots tracking object
         delete activePlots[metricName];
-        console.log(`Removed plot: ${metricName}`);
+        console.log(`Removed plot state for: ${metricName}`);
     }
 }
 
 
-function createOrUpdatePlot(metricName, plotDataForMetric) {
+function createOrUpdatePlot(metricName, plotDataForMetric, parentElement) {
     let plotInfo = activePlots[metricName];
     let wglp, zoomRectLine;
+    const plotContainerId = `plot-wrapper-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`; // Define ID early
 
     // --- Calculate Overall Data Range ---
     let overallMinStep = Infinity, overallMaxStep = -Infinity;
     let overallMinY = Infinity, overallMaxY = -Infinity;
     let hasValidData = false; // Flag if any *selected* run has data for this metric
 
-    // Use Object.keys on the passed plotDataForMetric, which only contains selected runs
     const runsInMetric = Object.keys(plotDataForMetric);
 
     runsInMetric.forEach(runName => {
-        // Check if runName is actually in the currently selected runs (belt-and-suspenders)
-        if (!selectedRuns.includes(runName)) return;
+        if (!selectedRuns.includes(runName)) return; // Ensure run is actually selected
 
         const runData = plotDataForMetric[runName];
         if (runData && runData.steps && runData.steps.length > 0 && runData.steps.length === runData.values.length) {
-            // Ensure steps/values are finite before calculating range
-            const validSteps = runData.steps.filter(isFinite);
-            const validValues = runData.values.filter(isFinite);
+            const validSteps = runData.steps.filter(s => isFinite(s));
+            const validValues = runData.values.filter(v => isFinite(v));
 
             if (validSteps.length > 0) {
-                 hasValidData = true; // Found at least one selected run with valid data
+                hasValidData = true;
                 overallMinStep = Math.min(overallMinStep, ...validSteps);
                 overallMaxStep = Math.max(overallMaxStep, ...validSteps);
             }
             if (validValues.length > 0) {
-                 hasValidData = true; // Found at least one selected run with valid data
+                hasValidData = true;
                 overallMinY = Math.min(overallMinY, ...validValues);
                 overallMaxY = Math.max(overallMaxY, ...validValues);
             }
         }
     });
 
-    // If no selected run has valid data for this metric, remove/hide the plot
+    // If no selected run has valid data for this metric, ensure it's removed
     if (!hasValidData) {
         if (plotInfo) {
-            // Option 1: Remove the plot entirely if no selected runs have data
-             removePlot(metricName);
-            // Option 2: Keep plot shell but hide lines (more complex state)
-            // Object.values(plotInfo.lines).forEach(line => line.visible = false);
-            // Make sure title indicates no data?
+            // Plot state exists, but no data. Remove it completely.
+            console.log(`Removing plot (no valid data): ${metricName}`);
+            removePlot(metricName);
+        } else {
+            // Plot state doesn't exist and no data, check if DOM element exists erroneously and remove it
+            const existingWrapper = document.getElementById(plotContainerId);
+            if (existingWrapper && existingWrapper.parentNode) {
+                console.warn(`Found orphaned plot wrapper ${plotContainerId} with no data or state. Removing.`);
+                existingWrapper.parentNode.removeChild(existingWrapper);
+            }
         }
-        console.log(`No valid data for metric ${metricName} in currently selected runs. Skipping/Removing plot.`);
         return; // Exit if no data to plot for selection
     }
-
 
     // Handle range defaults if only one point or infinite values encountered
     if (!isFinite(overallMinStep)) overallMinStep = 0;
@@ -299,103 +445,152 @@ function createOrUpdatePlot(metricName, plotDataForMetric) {
     if (overallMaxStep - overallMinStep < 1e-9) { overallMinStep -= 0.5; overallMaxStep += 0.5; }
     if (overallMaxY - overallMinY < 1e-9) { overallMinY -= Math.abs(overallMinY * 0.1) || 0.1; overallMaxY += Math.abs(overallMaxY * 0.1) || 0.1; }
 
-    // --- Create Plot if New ---
-    if (!plotInfo) {
-        console.log(`Creating plot: ${metricName}`);
-        const plotContainerId = `plot-wrapper-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`;
-        const canvasId = `canvas-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`;
 
-        // Check if element already exists (e.g., due to fast toggling)
-        let wrapper = document.getElementById(plotContainerId);
-        let canvas;
-        if (wrapper) {
-            console.warn(`Plot wrapper ${plotContainerId} already exists. Reusing.`);
-            canvas = wrapper.querySelector('canvas');
-            if (!canvas) { // Should not happen if wrapper exists, but safety check
-                 console.error("Wrapper exists but canvas missing. Recreating canvas.");
-                 canvas = document.createElement('canvas'); canvas.id = canvasId; canvas.className = 'plot-canvas';
-                 // Clear wrapper and append title/canvas? Or just append canvas? Assume structure is ok.
-                 if(wrapper.lastChild.tagName !== 'CANVAS') wrapper.appendChild(canvas); // Append if missing
+    // --- Create Plot or Ensure Correct Parent ---
+    let wrapper = document.getElementById(plotContainerId);
+    let canvas;
+    let needsInitialization = false;
+
+    if (!plotInfo) { // Case 1: Plot state doesn't exist
+        needsInitialization = true;
+        // console.log(`Creating plot state and element: ${metricName} inside parent`, parentElement);
+
+        if (wrapper) { // Element exists but state doesn't (e.g., error recovery)
+            console.warn(`Plot wrapper ${plotContainerId} exists but no state. Reusing element, initializing state.`);
+            // Ensure it's in the correct parent
+            if (wrapper.parentNode !== parentElement) {
+                console.warn(`Moving existing plot wrapper ${plotContainerId} to correct parent.`);
+                parentElement.appendChild(wrapper); // Move it
             }
-        } else {
-             wrapper = document.createElement('div'); wrapper.className = 'plot-wrapper'; wrapper.id = plotContainerId;
-             const title = document.createElement('h3'); title.textContent = metricName;
-             canvas = document.createElement('canvas'); canvas.id = canvasId; canvas.className = 'plot-canvas';
-             wrapper.appendChild(title); wrapper.appendChild(canvas);
-             dashboardContainer.appendChild(wrapper);
+            canvas = wrapper.querySelector('canvas');
+            if (!canvas) {
+                console.error("Wrapper exists but canvas missing. Recreating canvas.");
+                canvas = document.createElement('canvas');
+                canvas.className = 'plot-canvas';
+                // Clear wrapper and append? Just append for now.
+                wrapper.appendChild(canvas);
+            }
+        } else { // Element also doesn't exist, create it
+            wrapper = document.createElement('div');
+            wrapper.className = 'plot-wrapper';
+            wrapper.id = plotContainerId;
+            // *** Store the original metricName as a data attribute ***
+            wrapper.dataset.metricName = metricName; // Add this line
+            const title = document.createElement('h3');
+            title.textContent = metricName;
+            title.title = metricName; // Add title attribute for long names
+            canvas = document.createElement('canvas');
+            // canvas.id = `canvas-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`; // ID might not be needed if accessed via wrapper
+            canvas.className = 'plot-canvas';
+            wrapper.appendChild(title);
+            wrapper.appendChild(canvas);
+            // *** Append to the correct parentElement ***
+            parentElement.appendChild(wrapper);
         }
-
 
         const devicePixelRatio = window.devicePixelRatio || 1;
-        // Set initial canvas size based on CSS/parent
         const initialWidth = canvas.clientWidth || 400;
         const initialHeight = canvas.clientHeight || 300;
-        if (initialWidth > 0 && initialHeight > 0) {
-            canvas.width = initialWidth * devicePixelRatio;
-            canvas.height = initialHeight * devicePixelRatio;
-        } else {
-            // Fallback if clientWidth/Height are 0 initially
-            canvas.width = 400 * devicePixelRatio;
-            canvas.height = 300 * devicePixelRatio;
-             console.warn(`Canvas ${canvasId} client dimensions were zero initially. Using default size.`);
-        }
+        canvas.width = Math.max(1, Math.round(initialWidth * devicePixelRatio)); // Ensure non-zero
+        canvas.height = Math.max(1, Math.round(initialHeight * devicePixelRatio)); // Ensure non-zero
 
         wglp = new WebglPlot(canvas);
         zoomRectLine = new WebglLine(new ColorRGBA(0.9, 0.9, 0.9, 0.7), 4);
         zoomRectLine.loop = true; zoomRectLine.xy = new Float32Array(8).fill(0); zoomRectLine.visible = false;
         wglp.addLine(zoomRectLine);
 
-        plotInfo = { wglp, zoomRectLine, lines: {}, isInitialLoad: true };
-        activePlots[metricName] = plotInfo;
+        plotInfo = { wglp, zoomRectLine, lines: {}, isInitialLoad: true }; // Mark for initial axis set
+        activePlots[metricName] = plotInfo; // Add to active plots state map
 
-        setupInteractions(canvas, wglp, zoomRectLine, plotInfo);
+        setupInteractions(canvas, wglp, zoomRectLine, plotInfo); // Setup interactions
 
         if (canvas.width > 0 && canvas.height > 0) {
-             wglp.viewport(0, 0, canvas.width, canvas.height);
+            wglp.viewport(0, 0, canvas.width, canvas.height);
         } else {
-             console.error(`Canvas ${canvasId} has zero dimensions AFTER setup.`);
+            console.error(`Canvas ${metricName} has zero dimensions AFTER setup.`);
         }
 
-    } else {
+    } else { // Case 2: Plot state *does* exist
         wglp = plotInfo.wglp;
         zoomRectLine = plotInfo.zoomRectLine;
-        // If plot existed, it's not the *very first* load, but treat axis setting like initial load
-        // if the data context changed significantly. Or better: only set axes on explicit creation.
-        // Interactions should handle subsequent view adjustments.
-        // Let's remove the isInitialLoad flag concept here, rely on double-click reset.
-        // plotInfo.isInitialLoad = false;
+
+        // Ensure the existing DOM element is in the correct parent
+        if (!wrapper) {
+            console.error(`Plot state exists for ${metricName} but wrapper element not found. Cannot update.`);
+            // Attempt recovery? Maybe recreate element? For now, log error and skip update.
+            removePlot(metricName); // Clean up broken state
+            return;
+        }
+        if (wrapper.parentNode !== parentElement) {
+            console.warn(`Moving existing plot ${metricName} to new group parent.`);
+            parentElement.appendChild(wrapper); // Move it
+        }
+        // If state exists, but wglp object is missing (e.g. error during previous init), try re-init
+        if (!wglp) {
+            console.error(`Plot state exists for ${metricName} but wglp is missing. Re-initializing.`);
+            needsInitialization = true;
+            canvas = wrapper.querySelector('canvas');
+            if (!canvas) { // Should have canvas if wrapper exists, but check
+                console.error("Cannot re-initialize plot: canvas missing.");
+                removePlot(metricName); return;
+            }
+            // Re-create WebGL plot and lines
+            wglp = new WebglPlot(canvas);
+            zoomRectLine = new WebglLine(new ColorRGBA(0.9, 0.9, 0.9, 0.7), 4);
+            zoomRectLine.loop = true; zoomRectLine.xy = new Float32Array(8).fill(0); zoomRectLine.visible = false;
+            wglp.addLine(zoomRectLine);
+            plotInfo.wglp = wglp; // Update state
+            plotInfo.zoomRectLine = zoomRectLine;
+            plotInfo.lines = {}; // Reset lines map
+            plotInfo.isInitialLoad = true; // Force axis reset
+
+            setupInteractions(canvas, wglp, zoomRectLine, plotInfo);
+            if (canvas.width > 0 && canvas.height > 0) {
+                wglp.viewport(0, 0, canvas.width, canvas.height);
+            }
+        }
     }
 
-     // Store calculated ranges for reset
-     plotInfo.minStep = overallMinStep;
-     plotInfo.maxStep = overallMaxStep;
-     plotInfo.minY = overallMinY;
-     plotInfo.maxY = overallMaxY;
 
+    // Store calculated ranges for reset (always update ranges)
+    plotInfo.minStep = overallMinStep;
+    plotInfo.maxStep = overallMaxStep;
+    plotInfo.minY = overallMinY;
+    plotInfo.maxY = overallMaxY;
 
-    // --- Set Axis Scales ONLY on Creation (or explicit reset) ---
-    // We set this when the plot is *first created* based on the data *at that time*.
-    // Subsequent updates rely on user interaction or double-click reset using stored ranges.
-    if (!activePlots[metricName].wglp) { // Double check if wglp exists, means it was just created
-      console.log(`Setting initial axes for new plot: ${metricName}`);
-      setPlotAxes(wglp, overallMinStep, overallMaxStep, overallMinY, overallMaxY);
+    // --- Set Axis Scales on Initialization/Re-initialization ---
+    if (plotInfo.isInitialLoad) {
+        // console.log(`Setting initial axes for plot: ${metricName}`);
+        setPlotAxes(wglp, overallMinStep, overallMaxStep, overallMinY, overallMaxY);
+        plotInfo.isInitialLoad = false; // Mark initial load as done
     }
-     // Ensure plot is visible if it was previously hidden (e.g., by removePlot)
-     const wrapper = document.getElementById(`plot-wrapper-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`);
-     if(wrapper && wrapper.style.display === 'none') {
-         wrapper.style.display = ''; // Make visible again if needed
-     }
+
+    // Ensure plot wrapper is visible
+    if (wrapper && wrapper.style.display === 'none') {
+        wrapper.style.display = '';
+    }
+
 
     // --- Update Lines ---
     const existingRunsInPlotLines = Object.keys(plotInfo.lines);
-    const currentRunsForMetric = Object.keys(plotDataForMetric); // Runs selected AND having data for this metric
+    const currentRunsForMetric = Object.keys(plotDataForMetric).filter(runName => selectedRuns.includes(runName)); // Runs selected AND having data
 
-    // Hide lines for runs no longer selected OR runs with no data now for this metric
+    // Hide or remove lines for runs no longer selected OR runs with no data now for this metric
     existingRunsInPlotLines.forEach(runName => {
         if (!currentRunsForMetric.includes(runName)) {
             if (plotInfo.lines[runName]) {
+                // Instead of just hiding, let's try removing the line object entirely from wglp
+                // This requires wglp library support, assuming it has removeLine or similar
+                // If not, just setting visible=false is the fallback.
+                // Assuming wglp doesn't have removeLine, stick to visible=false:
                 plotInfo.lines[runName].visible = false;
-                 // console.log(`Hiding line (no longer selected/no data): ${metricName}/${runName}`);
+                // console.log(`Hiding line (no longer selected/no data): ${metricName}/${runName}`);
+
+                // If wglp HAD removeLine:
+                // try {
+                //    wglp.removeLine(plotInfo.lines[runName]);
+                // } catch (removeErr) { console.error("Error removing line:", removeErr); }
+                // delete plotInfo.lines[runName]; // Remove from our tracking map too
             }
         }
     });
@@ -404,12 +599,12 @@ function createOrUpdatePlot(metricName, plotDataForMetric) {
     currentRunsForMetric.forEach(runName => {
         const runData = plotDataForMetric[runName];
 
-        // Data validity check (already done for range calculation, but repeat for safety)
+        // Data validity check
         if (!runData || !runData.steps || runData.steps.length === 0 || runData.steps.length !== runData.values.length) {
-             if(plotInfo.lines[runName]) { plotInfo.lines[runName].visible = false; } // Hide if exists but no valid data now
-             if (runData && runData.steps && runData.values && runData.steps.length !== runData.values.length) {
-                 console.warn(`Step/value length mismatch for ${metricName}/${runName}. Hiding line.`);
-             }
+            if (plotInfo.lines[runName]) { plotInfo.lines[runName].visible = false; }
+            if (runData && runData.steps && runData.values && runData.steps.length !== runData.values.length) {
+                console.warn(`Step/value length mismatch for ${metricName}/${runName}. Hiding line.`);
+            }
             return; // Skip this run for this metric
         }
 
@@ -417,47 +612,65 @@ function createOrUpdatePlot(metricName, plotDataForMetric) {
         const numPoints = runData.steps.length;
         const color = getRunColor(runName);
 
-        if (!line) { // Create line if new for this run/metric combo
+        if (!line) { // Create line if new
             line = new WebglLine(color, numPoints);
             plotInfo.lines[runName] = line;
             wglp.addLine(line);
-             console.log(`Added line for ${runName} to ${metricName}`);
+            // console.log(`Added line for ${runName} to ${metricName}`);
         } else if (line.numPoints !== numPoints) { // Recreate if point count changed
-             console.warn(`Point count changed for ${metricName}/${runName} (${line.numPoints} -> ${numPoints}). Recreating line.`);
-             // Remove old line from WebGL plot instance if possible (library limitation?)
-             // Hack: Hide old one visually, create & add new one. GC should collect old GL buffers eventually.
-             line.visible = false; // Hide the old line object
+            console.warn(`Point count changed for ${metricName}/${runName} (${line.numPoints} -> ${numPoints}). Recreating line.`);
+            // Best practice: remove old line from wglp if possible, then add new one.
+            // Fallback: Hide old, create & add new. (Using fallback)
+            line.visible = false; // Hide old JS object visually
 
-             line = new WebglLine(color, numPoints); // Create a new line object
-             plotInfo.lines[runName] = line; // Replace the reference in our tracking map
-             wglp.addLine(line); // Add the NEW line object to the WebGL context
-             console.log(`Re-added line for ${runName} to ${metricName} after point count change.`);
+            line = new WebglLine(color, numPoints); // Create new JS object
+            plotInfo.lines[runName] = line; // Replace in our map
+            wglp.addLine(line); // Add NEW line object to WebGL context
+            // console.log(`Re-added line for ${runName} to ${metricName} after point count change.`);
         }
 
-        // Update line data and ensure visibility
+        // Update line data
         const xyData = new Float32Array(numPoints * 2);
-        let dataIsValid = true;
+        let dataIsValid = true; // Track if ALL points are valid
+        let validPointCount = 0;
         for (let i = 0; i < numPoints; i++) {
             const step = runData.steps[i];
             const value = runData.values[i];
             if (!isFinite(step) || !isFinite(value)) {
-                console.warn(`Non-finite data point at index ${i} for ${metricName}/${runName}. Setting to (0,0).`);
-                xyData[i * 2] = 0; xyData[i * 2 + 1] = 0; dataIsValid = false;
+                // Skip non-finite points entirely - don't plot them
+                // console.warn(`Non-finite data point at index ${i} for ${metricName}/${runName}. Skipping point.`);
+                dataIsValid = false; // Mark that some data was skipped
+                continue; // Don't increment validPointCount or add to xyData
             } else {
-                 xyData[i * 2] = step; xyData[i * 2 + 1] = value;
+                xyData[validPointCount * 2] = step;
+                xyData[validPointCount * 2 + 1] = value;
+                validPointCount++;
             }
         }
 
-        // Assign data and make visible only if data is valid (or numPoints > 0 as fallback)
-        if (numPoints > 0) { // Always update if points exist, even if some were invalid (set to 0,0)
-             line.xy = xyData;
-             line.color = color; // Ensure color is up-to-date if run toggled
-             line.visible = true; // Make sure it's visible
+        // Assign data and control visibility
+        if (validPointCount > 0) {
+            // If point count changed due to filtering NaNs, we might need to recreate the line buffer
+            if (line.numPoints !== validPointCount) {
+                console.warn(`Filtered point count changed for ${metricName}/${runName} (${line.numPoints} -> ${validPointCount}). Recreating line.`);
+                line.visible = false; // Hide old one
+                line = new WebglLine(color, validPointCount);
+                plotInfo.lines[runName] = line;
+                wglp.addLine(line);
+            }
+            // Use slice to only pass the valid points if filtering occurred
+            line.xy = xyData.slice(0, validPointCount * 2);
+            line.color = color; // Ensure color is current
+            line.visible = true; // Make visible
         } else {
-             line.visible = false; // Hide if numPoints is 0
+            line.visible = false; // Hide if no valid points remain
+            if (numPoints > 0) { // Log if there were points initially but all were invalid
+                console.warn(`All data points for ${metricName}/${runName} were non-finite. Hiding line.`);
+            }
         }
     });
-}
+
+} // End of createOrUpdatePlot
 
 // --- setPlotAxes and Interactions ---
 // (Keep setPlotAxes and setupInteractions the same as before)
@@ -880,8 +1093,326 @@ window.addEventListener('resize', () => {
 
 
 // --- Initialization ---
-async function initialize() {
-    await fetchRuns();
+async function initialize() {// main.js
+// ... (rest of your code)
+
+function updatePlots(metricsData) {
+    console.log("Updating plots...");
+    const currentMetricNames = Object.keys(metricsData);
+    const existingMetricNames = Object.keys(activePlots);
+
+    // Remove plots for metrics entirely gone from the latest data
+    existingMetricNames.forEach(metricName => {
+        if (!currentMetricNames.includes(metricName)) {
+            // removePlot correctly finds the element by ID and removes it from its parent
+            removePlot(metricName);
+        }
+    });
+
+
+    // *** MODIFIED GROUPING LOGIC START ***
+    const metricGroups = {};
+    const defaultGroupName = 'General'; // Name for metrics without a '/' prefix
+
+    currentMetricNames.forEach(metricName => {
+        let groupName;
+        const slashIndex = metricName.indexOf('/'); // Find the first slash
+
+        if (slashIndex !== -1) {
+            // Contains a slash, take the part *before* the first one
+            groupName = metricName.substring(0, slashIndex);
+        } else {
+            // No slash found, assign to the default group
+            groupName = defaultGroupName;
+        }
+
+        // Ensure the group array exists and add the metric name
+        if (!metricGroups[groupName]) {
+            metricGroups[groupName] = [];
+        }
+        metricGroups[groupName].push(metricName);
+    });
+    // *** MODIFIED GROUPING LOGIC END ***
+
+
+     // --- Remove Empty Group Containers ---
+     const currentGroupContainerIds = Array.from(dashboardContainer.querySelectorAll('.metric-group')).map(el => el.id);
+     currentGroupContainerIds.forEach(groupId => {
+         const groupNameFromId = groupId.replace('metric-group-', '');
+         // If a group container exists in the DOM but is NOT in our calculated metricGroups, remove it
+         if (!(groupNameFromId in metricGroups)) {
+             const groupContainerToRemove = document.getElementById(groupId);
+             if (groupContainerToRemove) {
+                 console.log(`Removing empty metric group container: ${groupNameFromId}`);
+                 dashboardContainer.removeChild(groupContainerToRemove);
+                 // Also remove associated plots from activePlots if they weren't caught earlier?
+                 // This part might be redundant if the first loop in updatePlots already removed them.
+             }
+         }
+     });
+     // --- End Remove Empty Group Containers ---
+
+
+    // Create or update tabs for each metric group, sorting alphabetically
+    // Make sure the 'General' group (or default) appears last or first if desired
+    const sortedGroupNames = Object.keys(metricGroups).sort((a, b) => {
+         if (a === defaultGroupName) return 1; // Push default group towards the end
+         if (b === defaultGroupName) return -1;
+         return a.localeCompare(b); // Alphabetical sort for others
+    });
+
+    sortedGroupNames.forEach(groupName => {
+        createOrUpdateMetricGroupTab(groupName, metricGroups[groupName], metricsData);
+    });
+
+
+    console.log("Plot update finished.");
+}
+
+function createOrUpdateMetricGroupTab(groupName, metricNames, metricsData) {
+    const groupContainerId = `metric-group-${groupName}`;
+    let groupContainer = document.getElementById(groupContainerId);
+    let plotsContainer; // Define plotsContainer variable
+
+    if (!groupContainer) {
+        // Create a new group container if it doesn't exist
+        groupContainer = document.createElement('div');
+        groupContainer.id = groupContainerId;
+        groupContainer.className = 'metric-group'; // Initially expanded
+
+        const header = document.createElement('div');
+        header.className = 'metric-group-header';
+        // Add title attribute for full name on hover
+        header.innerHTML = `<h3 title="${groupName}">${groupName}</h3><button class="toggle-button" aria-expanded="true" aria-controls="plots-${groupName}"></button>`;
+        header.addEventListener('click', () => {
+            const isCollapsed = groupContainer.classList.toggle('collapsed');
+            header.querySelector('button').setAttribute('aria-expanded', !isCollapsed);
+        });
+
+        plotsContainer = document.createElement('div'); // Assign here
+        plotsContainer.className = 'metric-group-plots';
+        plotsContainer.id = `plots-${groupName}`; // Add ID for aria-controls
+
+        groupContainer.appendChild(header);
+        groupContainer.appendChild(plotsContainer);
+        dashboardContainer.appendChild(groupContainer); // Add to main dashboard
+         console.log(`Created metric group container: ${groupName}`);
+    } else {
+        // If group container exists, find its plots container
+        plotsContainer = groupContainer.querySelector('.metric-group-plots');
+        if (!plotsContainer) {
+            // Safety check: If somehow plots container is missing, recreate it
+            console.warn(`Plots container missing for group ${groupName}. Recreating.`);
+            plotsContainer = document.createElement('div');
+            plotsContainer.className = 'metric-group-plots';
+            plotsContainer.id = `plots-${groupName}`;
+            groupContainer.appendChild(plotsContainer); // Append to existing group container
+        }
+        // Ensure header title is up-to-date (might not change often, but safe)
+        const headerH3 = groupContainer.querySelector('.metric-group-header h3');
+        if (headerH3) headerH3.title = groupName;
+    }
+
+    // Create or update plots for each metric in the group
+    metricNames.forEach(metricName => {
+        const plotDataForMetric = metricsData[metricName];
+        // *** Pass plotsContainer as the third argument ***
+        createOrUpdatePlot(metricName, plotDataForMetric, plotsContainer);
+    });
+
+    // --- Clean up plots no longer in this specific group ---
+    // Get all plot wrappers currently inside *this* group's plotsContainer
+    const currentPlotWrappersInGroup = Array.from(plotsContainer.children);
+
+    currentPlotWrappersInGroup.forEach(wrapperElement => {
+        // Derive metric name from ID. Handle potential errors if ID is unexpected.
+        const metricNameMatch = wrapperElement.id.match(/^plot-wrapper-(.+)$/);
+        if (metricNameMatch && metricNameMatch[1]) {
+             // Reconstruct the original metric name (replace hyphens used for ID safety)
+             // This assumes metric names don't contain hyphens that clash with the replacement pattern.
+             // A more robust way would be to store the metric name as a data attribute on the wrapper.
+             const existingMetricNameInGroup = metricNameMatch[1].replace(/-/g, '/'); // Adjust if name convention differs
+
+            // If a plot wrapper inside this group corresponds to a metric
+            // that is NOT in the 'metricNames' list for *this specific group* anymore, remove it.
+             if (!metricNames.includes(existingMetricNameInGroup)) {
+                 console.log(`Removing plot ${existingMetricNameInGroup} from group ${groupName} as it no longer belongs.`);
+                 // Directly remove the element since we have it, no need to call removePlot which deletes from activePlots too soon
+                  try {
+                      plotsContainer.removeChild(wrapperElement);
+                      // Now also remove from the global activePlots if it was removed from its *last* group
+                      // Check if this metric still exists in *any* group
+                      const stillExistsInAnyGroup = Object.values(metricGroups).flat().includes(existingMetricNameInGroup);
+                      if (!stillExistsInAnyGroup && activePlots[existingMetricNameInGroup]) {
+                         delete activePlots[existingMetricNameInGroup];
+                         console.log(`Deleted ${existingMetricNameInGroup} from activePlots as it was removed from its last group.`);
+                      }
+                  } catch (e) {
+                      console.warn(`Error removing plot wrapper ${wrapperElement.id} from group ${groupName}:`, e);
+                  }
+            }
+        } else {
+             console.warn("Found element in plots container with unexpected ID:", wrapperElement.id);
+        }
+    });
+     // --- End cleanup ---
+}
+
+// ... (rest of your code)
+
+    await fetchRuns();// main.js
+    // ... (rest of your code)
+    
+    function createOrUpdatePlot(metricName, plotDataForMetric, parentElement) {
+        // ... (existing code)
+    
+        // --- Create Plot or Ensure Correct Parent ---
+        let wrapper = document.getElementById(plotContainerId);
+        let canvas;
+        let needsInitialization = false;
+    
+        if (!plotInfo) { // Case 1: Plot state doesn't exist
+            needsInitialization = true;
+            // console.log(`Creating plot state and element: ${metricName} inside parent`, parentElement);
+    
+            if (wrapper) { // Element exists but state doesn't (e.g., error recovery)
+                console.warn(`Plot wrapper ${plotContainerId} exists but no state. Reusing element, initializing state.`);
+                 // Ensure it's in the correct parent
+                 if (wrapper.parentNode !== parentElement) {
+                     console.warn(`Moving existing plot wrapper ${plotContainerId} to correct parent.`);
+                     parentElement.appendChild(wrapper); // Move it
+                 }
+                canvas = wrapper.querySelector('canvas');
+                if (!canvas) {
+                     console.error("Wrapper exists but canvas missing. Recreating canvas.");
+                     canvas = document.createElement('canvas');
+                     canvas.className = 'plot-canvas';
+                     // Clear wrapper and append? Just append for now.
+                     wrapper.appendChild(canvas);
+                }
+            } else { // Element also doesn't exist, create it
+                 wrapper = document.createElement('div');
+                 wrapper.className = 'plot-wrapper';
+                 wrapper.id = plotContainerId;
+                 // *** Store the original metricName as a data attribute ***
+                 wrapper.dataset.metricName = metricName; // Add this line
+                 const title = document.createElement('h3');
+                 title.textContent = metricName;
+                 title.title = metricName; // Add title attribute for long names
+                 canvas = document.createElement('canvas');
+                 // canvas.id = `canvas-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`; // ID might not be needed if accessed via wrapper
+                 canvas.className = 'plot-canvas';
+                 wrapper.appendChild(title);
+                 wrapper.appendChild(canvas);
+                 // *** Append to the correct parentElement ***
+                 parentElement.appendChild(wrapper);
+            }
+    
+            const devicePixelRatio = window.devicePixelRatio || 1;
+            const initialWidth = canvas.clientWidth || 400;
+            const initialHeight = canvas.clientHeight || 300;
+            canvas.width = Math.max(1, Math.round(initialWidth * devicePixelRatio)); // Ensure non-zero
+            canvas.height = Math.max(1, Math.round(initialHeight * devicePixelRatio)); // Ensure non-zero
+    
+            wglp = new WebglPlot(canvas);
+            zoomRectLine = new WebglLine(new ColorRGBA(0.9, 0.9, 0.9, 0.7), 4);
+            zoomRectLine.loop = true; zoomRectLine.xy = new Float32Array(8).fill(0); zoomRectLine.visible = false;
+            wglp.addLine(zoomRectLine);
+    
+            plotInfo = { wglp, zoomRectLine, lines: {}, isInitialLoad: true }; // Mark for initial axis set
+            activePlots[metricName] = plotInfo; // Add to active plots state map
+    
+            setupInteractions(canvas, wglp, zoomRectLine, plotInfo); // Setup interactions
+    
+            if (canvas.width > 0 && canvas.height > 0) {
+                 wglp.viewport(0, 0, canvas.width, canvas.height);
+            } else {
+                 console.error(`Canvas ${metricName} has zero dimensions AFTER setup.`);
+            }
+    
+        } else { // Case 2: Plot state *does* exist
+            wglp = plotInfo.wglp;
+            zoomRectLine = plotInfo.zoomRectLine;
+    
+            // Ensure the existing DOM element is in the correct parent
+            if (!wrapper) {
+                 console.error(`Plot state exists for ${metricName} but wrapper element not found. Cannot update.`);
+                 // Attempt recovery? Maybe recreate element? For now, log error and skip update.
+                 removePlot(metricName); // Clean up broken state
+                 return;
+            }
+            if (wrapper.parentNode !== parentElement) {
+                console.warn(`Moving existing plot ${metricName} to new group parent.`);
+                parentElement.appendChild(wrapper); // Move it
+            }
+             // If state exists, but wglp object is missing (e.g. error during previous init), try re-init
+             if (!wglp) {
+                 console.error(`Plot state exists for ${metricName} but wglp is missing. Re-initializing.`);
+                 needsInitialization = true;
+                 canvas = wrapper.querySelector('canvas');
+                 if (!canvas) { // Should have canvas if wrapper exists, but check
+                     console.error("Cannot re-initialize plot: canvas missing.");
+                     removePlot(metricName); return;
+                 }
+                 // Re-create WebGL plot and lines
+                 wglp = new WebglPlot(canvas);
+                 zoomRectLine = new WebglLine(new ColorRGBA(0.9, 0.9, 0.9, 0.7), 4);
+                 zoomRectLine.loop = true; zoomRectLine.xy = new Float32Array(8).fill(0); zoomRectLine.visible = false;
+                 wglp.addLine(zoomRectLine);
+                 plotInfo.wglp = wglp; // Update state
+                 plotInfo.zoomRectLine = zoomRectLine;
+                 plotInfo.lines = {}; // Reset lines map
+                 plotInfo.isInitialLoad = true; // Force axis reset
+    
+                 setupInteractions(canvas, wglp, zoomRectLine, plotInfo);
+                 if (canvas.width > 0 && canvas.height > 0) {
+                      wglp.viewport(0, 0, canvas.width, canvas.height);
+                 }
+             }
+        }
+    
+        // ... (rest of the code)
+    }
+    
+    function createOrUpdateMetricGroupTab(groupName, metricNames, metricsData) {
+        // ... (existing code)
+    
+        currentPlotWrappersInGroup.forEach(wrapperElement => {
+            // *** Get the original metricName from the data attribute ***
+            const existingMetricNameInGroup = wrapperElement.dataset.metricName; // Change this line
+            if (existingMetricNameInGroup) {
+                // If a plot wrapper inside this group corresponds to a metric
+                // that is NOT in the 'metricNames' list for *this specific group* anymore, remove it.
+                if (!metricNames.includes(existingMetricNameInGroup)) {
+                    console.log(`Removing plot ${existingMetricNameInGroup} from group ${groupName} as it no longer belongs.`);
+                    // Directly remove the element since we have it, no need to call removePlot which deletes from activePlots too soon
+                    try {
+                        plotsContainer.removeChild(wrapperElement);
+                        // Now also remove from the global activePlots if it was removed from its *last* group
+                        // Check if this metric still exists in *any* group
+                        const stillExistsInAnyGroup = Object.values(metricGroups).flat().includes(existingMetricNameInGroup);
+                        if (!stillExistsInAnyGroup && activePlots[existingMetricNameInGroup]) {
+                            delete activePlots[existingMetricNameInGroup];
+                            console.log(`Deleted ${existingMetricNameInGroup} from activePlots as it was removed from its last group.`);
+                        }
+                    } catch (e) {
+                        console.warn(`Error removing plot wrapper ${wrapperElement.id} from group ${groupName}:`, e);
+                    }
+                }
+            } else {
+                console.warn("Found element in plots container with unexpected ID or missing data-metric-name:", wrapperElement.id);
+                // *** Add a check to remove the element if it's missing the data attribute ***
+                try {
+                    plotsContainer.removeChild(wrapperElement);
+                    console.warn(`Removed orphaned plot wrapper ${wrapperElement.id} from group ${groupName}.`);
+                } catch (e) {
+                    console.warn(`Error removing orphaned plot wrapper ${wrapperElement.id} from group ${groupName}:`, e);
+                }
+            }
+        });
+        // --- End cleanup ---
+    }
+    
     // Data is now fetched on demand by handleRunSelectionChange -> fetchDataForSelectedRuns
     requestAnimationFrame(updateDashboard);
 }
