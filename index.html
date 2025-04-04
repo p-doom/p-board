@@ -7,14 +7,22 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- Add id="app-container" -->
     <div id="app-container">
 
         <aside id="sidebar">
             <div class="sidebar-header">
                  <h2>p-board</h2>
+                 <!-- Add this button -->
+                 <button id="sidebar-toggle-btn" title="Toggle Sidebar"><</button>
             </div>
             <div id="controls-container">
+                <!-- Add bulk selection buttons -->
                 <h3>Select Runs:</h3>
+                <div id="run-bulk-controls" style="display: none;"> <!-- Initially hidden -->
+                    <button class="bulk-action-btn" id="select-all-runs">Select All</button>
+                    <button class="bulk-action-btn" id="deselect-all-runs">Deselect All</button>
+                </div>
                 <div id="run-selector">
                     <p>Loading runs...</p>
                 </div>
@@ -24,11 +32,11 @@
              <div class="sidebar-footer">
                  <p>Interaction Guide</p>
                  <ul>
-                     <li><kbd>Shift</kbd>+Scroll: Zoom Plot</li> {/* MODIFIED */}
+                     <li><kbd>Shift</kbd>+Scroll: Zoom Plot</li>
                      <li>R-Click+Drag: Pan Plot</li>
                      <li>L-Click+Drag: Area Zoom Plot</li>
                      <li>Dbl-Click: Reset Plot View</li>
-                     <li>Scroll: Scroll Page</li> {/* ADDED */}
+                     <li>Scroll: Scroll Page</li>
                  </ul>
              </div>
         </aside>
@@ -39,6 +47,7 @@
         <main id="main-content">
             <div id="dashboard-container">
                 <!-- Plots added here -->
+                 <p class="placeholder-text">Select runs from the sidebar to view plots.</p> <!-- Placeholder -->
             </div>
             <div class="info">
                 <p>Using <a href="https://github.com/danchitnis/webgl-plot" target="_blank" rel="noopener">webgl-plot</a> library.</p>

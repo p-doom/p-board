@@ -43,6 +43,9 @@
     --resizer-width: 5px; /* Width of the draggable area */
     --sidebar-min-width: 200px; /* Minimum sidebar width */
     --sidebar-max-width: 600px; /* Maximum sidebar width */
+    /* --- NEW: Collapsed state variables --- */
+    --sidebar-collapsed-width: 0px; /* Collapsed width */
+    --resizer-collapsed-width: 0px; /* Hide resizer when collapsed */
 }
 
 /* Basic Reset */
@@ -85,6 +88,7 @@ a:hover, a:focus {
     display: grid;
     grid-template-columns: var(--sidebar-width) var(--resizer-width) 1fr;
     height: 100vh;
+    transition: grid-template-columns var(--transition-medium); /* Animate grid change */
 }
 
 /* Sidebar Styling */
@@ -95,17 +99,29 @@ a:hover, a:focus {
     display: flex;
     flex-direction: column;
     overflow-y: auto; /* Allow sidebar itself to scroll if needed */
+    overflow-x: hidden; /* Prevent content overflow */
     height: 100%;
     min-width: var(--sidebar-min-width); /* Apply min width */
     max-width: var(--sidebar-max-width); /* Apply max width */
-    overflow-x: hidden; /* Prevent content overflow when shrinking */
+    width: var(--sidebar-width); /* Explicit width for transition */
+    transition: width var(--transition-medium),
+                min-width var(--transition-medium),
+                padding var(--transition-medium),
+                border var(--transition-medium),
+                opacity var(--transition-medium); /* Animate properties */
+    opacity: 1;
 }
+
 #resizer {
     grid-column: 2 / 3; /* Position in the second grid column */
     cursor: col-resize;
     background-color: var(--border-color); /* Make it visible */
     height: 100%;
-    transition: background-color var(--transition-fast);
+    width: var(--resizer-width); /* Explicit width for transition */
+    transition: background-color var(--transition-fast),
+                width var(--transition-medium),
+                opacity var(--transition-medium); /* Animate width and visibility */
+    opacity: 1;
     /* Optional: Add a subtle hover effect */
     &:hover {
         background-color: var(--accent-secondary);
@@ -121,13 +137,110 @@ a:hover, a:focus {
     padding-bottom: var(--spacing-md);
     margin-bottom: var(--spacing-lg);
     border-bottom: 1px solid var(--border-color);
+    display: flex; /* Use flexbox */
+    justify-content: space-between; /* Space title and button */
+    align-items: center; /* Vertically align */
+    flex-shrink: 0; /* Prevent header from shrinking */
 }
 
 .sidebar-header h2 {
     font-size: var(--font-size-large);
     font-weight: 600;
     color: var(--text-primary);
+    margin: 0; /* Remove default margin */
+    white-space: nowrap; /* Prevent wrapping */
 }
+
+/* --- NEW: Toggle Button Styles --- */
+#sidebar-toggle-btn {
+    background: none;
+    border: 1px solid transparent; /* Transparent border for consistent size */
+    color: var(--text-secondary);
+    font-size: var(--font-size-large);
+    font-weight: bold;
+    cursor: pointer;
+    padding: 0 var(--spacing-sm);
+    line-height: 1;
+    border-radius: var(--border-radius);
+    transition: background-color var(--transition-fast), color var(--transition-fast);
+    margin-left: var(--spacing-md); /* Space from title */
+    flex-shrink: 0; /* Prevent button shrinking */
+}
+
+#sidebar-toggle-btn:hover {
+    background-color: var(--bg-light);
+    color: var(--text-primary);
+}
+#sidebar-toggle-btn:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 1px;
+}
+
+/* Bulk Run Selection Controls */
+#run-bulk-controls {
+    display: flex;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md); /* Space before the list */
+    flex-shrink: 0; /* Prevent shrinking */
+}
+
+.bulk-action-btn {
+    flex-grow: 1; /* Make buttons share space */
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: var(--font-size-small);
+    background-color: var(--bg-light);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: background-color var(--transition-fast), color var(--transition-fast);
+    text-align: center;
+}
+.bulk-action-btn:hover {
+    background-color: hsl(from var(--bg-light) h s calc(l + 5%));
+    color: var(--text-primary);
+}
+.bulk-action-btn:active {
+    background-color: hsl(from var(--bg-light) h s calc(l - 5%));
+}
+.bulk-action-btn:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 1px;
+}
+
+/* --- NEW: Styles for Collapsed State --- */
+
+#app-container.sidebar-collapsed {
+    /* Change grid to remove sidebar and resizer space */
+    grid-template-columns: var(--sidebar-collapsed-width) var(--resizer-collapsed-width) 1fr;
+}
+
+#app-container.sidebar-collapsed #sidebar {
+    width: var(--sidebar-collapsed-width);
+    min-width: var(--sidebar-collapsed-width); /* Crucial */
+    padding-left: 0;
+    padding-right: 0;
+    border-right-width: 0;
+    opacity: 0; /* Fade out */
+    overflow: hidden; /* Hide content completely */
+}
+
+#app-container.sidebar-collapsed #resizer {
+    width: var(--resizer-collapsed-width);
+    opacity: 0;
+    cursor: default; /* Change cursor when hidden */
+}
+
+/* Change toggle button icon when collapsed */
+#app-container.sidebar-collapsed #sidebar-toggle-btn {
+    /* You might want to move the button outside the sidebar
+       when collapsed for discoverability, but for simplicity,
+       we just change the icon. It will disappear with the sidebar.
+       A floating button approach would be more complex. */
+    /* content: '»'; */ /* This doesn't work on button content */
+    /* Let's just keep the button as is, it will hide with the sidebar */
+}
+
 
 #controls-container {
     flex-grow: 1; /* Allow controls to take available space */
@@ -272,6 +385,7 @@ a:hover, a:focus {
     border-top: 1px solid var(--border-color);
     font-size: var(--font-size-small);
     color: var(--text-secondary);
+    flex-shrink: 0; /* Prevent footer shrinking */
 }
 .sidebar-footer p {
     font-weight: 600;
@@ -283,6 +397,18 @@ a:hover, a:focus {
 }
 .sidebar-footer li {
     margin-bottom: var(--spacing-xs);
+}
+.sidebar-footer kbd { /* Style kbd tag */
+    display: inline-block;
+    padding: 2px 6px;
+    font-family: monospace;
+    font-size: 0.9em;
+    color: var(--text-primary);
+    background-color: var(--bg-light);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-shadow: inset 0 -1px 0 var(--border-color);
+    margin: 0 2px;
 }
 
 
@@ -311,7 +437,7 @@ a:hover, a:focus {
     border-radius: var(--border-radius);
     /* box-shadow: var(--box-shadow); */ /* Optional: Shadow on groups */
     overflow: hidden; /* Contain elements */
-    margin-bottom: var(--spacing-lg); /* Space between groups */
+    /* margin-bottom: var(--spacing-lg); */ /* Gap handled by flex parent */
 }
 
 .metric-group-header {
@@ -387,7 +513,7 @@ a:hover, a:focus {
     grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); /* Responsive grid for plots */
     gap: var(--spacing-lg);
     padding: var(--spacing-lg);
-    transition: opacity var(--transition-medium); /* Add transition for hide/show */
+    /* transition: opacity var(--transition-medium); */ /* Add transition for hide/show */
 }
 
 /* Style for collapsed state */
@@ -413,6 +539,11 @@ a:hover, a:focus {
     font-size: var(--font-size-medium);
     padding: var(--spacing-xl);
     grid-column: 1 / -1; /* Span full grid width */
+    background-color: var(--bg-medium); /* Match plot bg */
+    border: 1px dashed var(--border-color);
+    border-radius: var(--border-radius);
+    margin: auto; /* Center it */
+    max-width: 600px;
 }
 
 
