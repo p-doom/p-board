@@ -12,8 +12,6 @@
         <aside id="sidebar">
             <div class="sidebar-header">
                  <h2>p-board</h2>
-                 <!-- Original toggle button (for collapsing) -->
-                 <button id="sidebar-toggle-btn" title="Collapse Sidebar"><</button>
             </div>
             <div id="controls-container">
                 <!-- ... (rest of controls) ... -->
@@ -33,13 +31,13 @@
              </div>
         </aside>
 
-        <!-- Draggable Resizer Element -->
-        <div id="resizer"></div>
-
-        <!-- NEW: Reopen Button - Placed before main content -->
-        <button id="sidebar-reopen-btn" title="Expand Sidebar" aria-label="Expand Sidebar">></button>
-
         <main id="main-content">
+            <!-- ========= NEW SEARCH BAR START ========= -->
+            <div id="search-bar-container">
+                <input type="search" id="metric-search-input" placeholder="Filter metrics by name...">
+            </div>
+            <!-- ========= NEW SEARCH BAR END =========== -->
+
             <div id="dashboard-container">
                  <p class="placeholder-text">Select runs from the sidebar to view plots.</p>
             </div>

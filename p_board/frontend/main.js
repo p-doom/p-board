@@ -8,15 +8,13 @@ const runSelectorContainer = document.getElementById('run-selector');
 const loadingIndicator = document.getElementById('loading-indicator');
 const errorMessageDiv = document.getElementById('error-message');
 const sidebar = document.getElementById('sidebar');
-const resizer = document.getElementById('resizer');
 const mainContent = document.getElementById('main-content');
-const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
-const sidebarReopenBtn = document.getElementById('sidebar-reopen-btn');
 const placeholderText = document.querySelector('#dashboard-container .placeholder-text');
 const runBulkControls = document.getElementById('run-bulk-controls');
 const selectAllBtn = document.getElementById('select-all-runs');
 const deselectAllBtn = document.getElementById('deselect-all-runs');
 const plotTooltip = document.getElementById('plot-tooltip'); // Tooltip Element
+const metricSearchInput = document.getElementById('metric-search-input'); // <-- NEW
 
 // --- Configuration ---
 const API_BASE_URL = ''; // <-- NEW: Requests will go to the same origin
@@ -238,6 +236,7 @@ function clearError() {
 // --- API Fetching ---
 async function fetchRuns() {
     clearError();
+    updatePlaceholderVisibility(); // Update placeholder based on initial run state
     try {
         const response = await fetch(`${API_BASE_URL}/api/runs`);
         if (!response.ok) throw new Error(`Failed to fetch runs: ${response.status} ${response.statusText}`);
@@ -258,6 +257,7 @@ async function fetchRuns() {
 
 async function fetchDataForSelectedRuns() {
     clearError();
+    updatePlaceholderVisibility(); // Shows initial "select runs" if none selected
 
     // Show placeholder if no runs are selected
     if (placeholderText) {
@@ -267,13 +267,13 @@ async function fetchDataForSelectedRuns() {
     if (selectedRuns.length === 0) {
         console.log("No runs selected, clearing plots.");
         updatePlots({}); // Clear plots
+        handleMetricSearch(); // Apply filter (will show/hide placeholder correctly)
         return;
     }
 
     const runsToFetch = selectedRuns.filter(runName => !(runName in frontendDataCache));
     const cachedRuns = selectedRuns.filter(runName => runName in frontendDataCache);
 
-    console.log(`Selected: ${selectedRuns.join(', ')}`);
     console.log(`Cached: ${cachedRuns.join(', ') || 'None'}`);
     console.log(`Need to fetch: ${runsToFetch.join(', ') || 'None'}`);
 
@@ -332,9 +332,8 @@ async function fetchDataForSelectedRuns() {
             }
         }
     }
-
     console.log(`Updating plots with data for ${Object.keys(metricsDataForUpdate).length} metrics covering runs: ${selectedRuns.join(', ')}`);
-    updatePlots(metricsDataForUpdate);
+    updatePlots(metricsDataForUpdate); // This function will call handleMetricSearch at the end
 }
 
 
@@ -365,20 +364,16 @@ function handleRunSelectionChange(event, fromBulkAction = false) {
     // Update selectedRuns state
     selectedRuns = Array.from(runSelectorContainer.querySelectorAll('input[type="checkbox"]:checked')).map(cb => cb.value);
 
-    // Update placeholder visibility based on selection
-     if (placeholderText) {
-         placeholderText.style.display = selectedRuns.length === 0 ? 'block' : 'none';
-     }
+    // Update placeholder visibility immediately based on selection change
+    updatePlaceholderVisibility(); // Reflects if runs are now selected/deselected
 
-
-    // If called from a bulk action, skip debounce and fetch immediately
+    // Debounce or fetch immediately
     if (fromBulkAction) {
-        clearTimeout(debounceTimer); // Clear any pending debounce
-        fetchDataAndResetView();
-    } else {
-        // Debounce for individual checkbox clicks
         clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(fetchDataAndResetView, 300);
+        fetchDataAndResetView(); // This calls updatePlots -> handleMetricSearch
+    } else {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(fetchDataAndResetView, 300); // This calls updatePlots -> handleMetricSearch
     }
 }
 
@@ -418,11 +413,6 @@ function updatePlots(metricsData) {
     console.log("Updating plots...");
     const currentMetricNames = Object.keys(metricsData);
     const existingMetricNames = Object.keys(activePlots);
-
-    // Hide placeholder if we have metrics to plot or runs selected
-    if (placeholderText) {
-        placeholderText.style.display = currentMetricNames.length === 0 && selectedRuns.length === 0 ? 'block' : 'none';
-    }
 
     // Remove plots for metrics entirely gone from the latest data
     existingMetricNames.forEach(metricName => {
@@ -472,8 +462,9 @@ function updatePlots(metricsData) {
     sortedGroupNames.forEach(groupName => {
         createOrUpdateMetricGroupTab(groupName, metricGroups[groupName], metricsData, metricGroups); // Pass all groups for cleanup check
     });
+    handleMetricSearch(); // Apply current filter to the potentially changed DOM structure
 
-    console.log("Plot update finished.");
+    console.log("Plot update finished and search filter reapplied.");
 }
 
 function createOrUpdateMetricGroupTab(groupName, metricNames, metricsData, allMetricGroups) { // Receive allMetricGroups
@@ -1570,152 +1561,87 @@ function updateDashboard() {
     animationFrameId = requestAnimationFrame(updateDashboard);
 }
 
-// Debounced resize handler
-window.addEventListener('resize', () => {
-    // Clear any pending timeout to avoid multiple resize calls
-    clearTimeout(window.resizeTimeout);
-    // Set a new timeout
-    window.resizeTimeout = setTimeout(() => {
-        console.log("Resizing plots and axes due to window/container resize...");
-        const devicePixelRatio = window.devicePixelRatio || 1;
+// --- Search/Filter Logic ---
+function handleMetricSearch() {
+    if (!metricSearchInput) return; // Safety check
 
-        // Iterate through all active plots
-        for (const metricName in activePlots) {
-            const plotInfo = activePlots[metricName];
-            if (!plotInfo || !plotInfo.wglp || !plotInfo.canvas) continue; // Skip if plot is not fully initialized
+    const searchTerm = metricSearchInput.value.toLowerCase().trim();
+    const allMetricGroups = dashboardContainer.querySelectorAll('.metric-group');
+    let anyPlotVisibleOverall = false;
 
-            const wglp = plotInfo.wglp;
-            const canvas = plotInfo.canvas; // Main WebGL canvas
+    allMetricGroups.forEach(groupContainer => {
+        const groupPlotsContainer = groupContainer.querySelector('.metric-group-plots');
+        const plotWrappers = groupPlotsContainer ? groupPlotsContainer.querySelectorAll('.plot-wrapper') : [];
+        let groupHasVisiblePlots = false;
+        // const groupName = groupContainer.querySelector('.metric-group-header h3')?.textContent?.toLowerCase() || ''; // Optional: filter group name too
 
-            // --- Resize Main WebGL Canvas ---
-            // Read the current CSS dimensions of the canvas element
-            const newWidth = canvas.clientWidth;
-            const newHeight = canvas.clientHeight;
-
-            // Proceed only if dimensions are valid
-            if (newWidth > 0 && newHeight > 0) {
-                // Calculate the required buffer size based on DPR
-                const targetWidth = Math.round(newWidth * devicePixelRatio);
-                const targetHeight = Math.round(newHeight * devicePixelRatio);
-
-                // Only resize if the buffer size actually needs to change
-                if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
-                    canvas.width = targetWidth;
-                    canvas.height = targetHeight;
-                    // IMPORTANT: Update the WebGL viewport to match the new buffer size
-                    wglp.viewport(0, 0, canvas.width, canvas.height);
-                    // console.log(`Resized main canvas for ${metricName} to ${targetWidth}x${targetHeight}`);
-                }
+        plotWrappers.forEach(wrapper => {
+            const metricName = wrapper.dataset.metricName?.toLowerCase(); // Get from dataset
+            let isMatch = false;
+            if (metricName) {
+                // Match if search term is empty OR metric name includes the term
+                isMatch = searchTerm === '' || metricName.includes(searchTerm);
             } else {
-                console.warn(`Main canvas for ${metricName} client dimensions are zero during resize. Skipping resize.`);
+                // If somehow a wrapper has no metric name, hide it when searching
+                isMatch = searchTerm === '';
             }
 
-            // --- Resize Axis Canvases ---
-            // The sizeAxisCanvases function reads client dimensions and sets buffer size
-             if (plotInfo.xAxisCanvas && plotInfo.yAxisCanvas) {
-                 sizeAxisCanvases(plotInfo); // This handles DPR internally
-                 // console.log(`Resized axis canvases for ${metricName}`);
-             }
+            // Show/hide individual plot
+            wrapper.style.display = isMatch ? '' : 'none'; // Use '' for default display (grid item)
 
-             // No need to call setPlotAxes here - the existing scale/offset are usually preserved.
-             // The animation loop (updateDashboard) will redraw the axes correctly on the next frame.
-        }
-         // Optional: A single redraw call might be slightly cleaner if needed immediately after resize logic completes
-         // updateDashboard(); // Call once manually if needed right away (usually not necessary due to requestAnimationFrame)
-    }, 250); // Debounce timeout (e.g., 250ms)
-});
+            if (isMatch) {
+                groupHasVisiblePlots = true;
+                anyPlotVisibleOverall = true; // Track if ANY plot is visible across all groups
+            }
+        });
 
-// --- Sidebar Resizer Logic ---
-// Combined function to handle toggling the sidebar state
-function toggleSidebar() {
-    const isCurrentlyCollapsed = appContainer.classList.contains('sidebar-collapsed');
-    appContainer.classList.toggle('sidebar-collapsed');
-
-    // Update ARIA attributes and titles (optional but good practice)
-    if (isCurrentlyCollapsed) {
-        // Expanding
-        sidebarToggleBtn.title = "Collapse Sidebar";
-        sidebarReopenBtn.setAttribute('aria-expanded', 'false'); // Reopen button is now hidden
-        sidebarToggleBtn.setAttribute('aria-expanded', 'true'); // Original button is now visible
-    } else {
-        // Collapsing
-        sidebarToggleBtn.title = "Expand Sidebar"; // Title changes on the button *about* to be hidden
-        sidebarReopenBtn.title = "Expand Sidebar";
-        sidebarToggleBtn.setAttribute('aria-expanded', 'false');
-        sidebarReopenBtn.setAttribute('aria-expanded', 'true'); // Reopen button is now visible
-    }
-
-    // Important: Trigger resize after CSS transition completes to allow plots to adjust
-    setTimeout(() => {
-        // console.log("Triggering resize after sidebar toggle");
-        window.dispatchEvent(new Event('resize'));
-    }, 300); // Match CSS transition duration + small buffer
-}
-
-function setupSidebarToggle() {
-    // Attach the *same* toggle function to both buttons
-    sidebarToggleBtn.addEventListener('click', toggleSidebar);
-    sidebarReopenBtn.addEventListener('click', toggleSidebar); // Reopen button triggers same action
-
-    // Initial ARIA state (assuming sidebar starts expanded)
-    sidebarToggleBtn.setAttribute('aria-expanded', 'true');
-    sidebarReopenBtn.setAttribute('aria-expanded', 'false'); // Reopen button starts hidden
-}
-
-function setupResizer() {
-    // Get min/max width from CSS variables
-    const minSidebarWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-min-width'), 10) || 150;
-    const maxSidebarWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-max-width'), 10) || 800;
-
-    // Mouse move handler during resize
-    const doDrag = (e) => {
-        if (!isResizing) return;
-        e.preventDefault(); // Prevent text selection during drag
-
-        // Calculate new width based on mouse X position, respecting bounds
-        let newSidebarWidth = e.clientX;
-        newSidebarWidth = Math.max(minSidebarWidth, newSidebarWidth); // Apply minimum
-        newSidebarWidth = Math.min(maxSidebarWidth, newSidebarWidth); // Apply maximum
-
-        // Update the CSS variable - the grid layout depends on this variable
-        appContainer.style.setProperty('--sidebar-width', `${newSidebarWidth}px`);
-
-        // Note: Plot resizing happens via the 'resize' event dispatched in stopDrag
-    };
-
-    // Mouse up handler to stop resizing
-    const stopDrag = (e) => {
-        if (isResizing) {
-            isResizing = false;
-            // Remove global listeners
-            document.removeEventListener('mousemove', doDrag, false);
-            document.removeEventListener('mouseup', stopDrag, false);
-            document.body.style.cursor = ''; // Reset global cursor
-
-             // Trigger a window resize event AFTER the drag stops
-             // This allows plots in the main content area to adjust to the new layout
-             window.dispatchEvent(new Event('resize'));
-        }
-    };
-
-    // Mouse down handler on the resizer element
-    resizer.addEventListener('mousedown', (e) => {
-        // Ignore drag attempts if the sidebar is collapsed (resizer might be hidden/zero-width)
-        if (appContainer.classList.contains('sidebar-collapsed')) {
-             return;
-        }
-        e.preventDefault(); // Prevent default drag behaviors
-        isResizing = true;
-        document.body.style.cursor = 'col-resize'; // Change cursor globally
-
-        // Attach listeners to the document to capture mouse moves anywhere on the page
-        document.addEventListener('mousemove', doDrag, false);
-        document.addEventListener('mouseup', stopDrag, false);
+        // Show/hide the entire group container
+        // Show the group if the search term is empty OR if the group itself has visible plots
+        const showGroup = searchTerm === '' || groupHasVisiblePlots;
+        groupContainer.style.display = showGroup ? '' : 'none';
     });
+
+    // Update placeholder text based on selection and filtering results
+    updatePlaceholderVisibility(anyPlotVisibleOverall);
 }
 
+
+// Helper to centralize placeholder logic
+function updatePlaceholderVisibility(anyPlotVisible = true) { // Default to true if not checking filter results
+    if (!placeholderText) return;
+
+    const noRunsSelected = selectedRuns.length === 0;
+    const searchTerm = metricSearchInput ? metricSearchInput.value.trim() : '';
+    const isFiltering = searchTerm !== '';
+
+    if (noRunsSelected) {
+        placeholderText.textContent = "Select runs from the sidebar to view plots.";
+        placeholderText.style.display = 'block';
+    } else if (isFiltering && !anyPlotVisible) {
+        placeholderText.textContent = `No metrics found matching "${searchTerm}".`;
+        placeholderText.style.display = 'block';
+    } else if (!isFiltering && !anyPlotVisible && !noRunsSelected) {
+        // This case means runs are selected, no filter applied, but still no plots visible
+        // (could be due to no common metrics, or all data being invalid)
+        placeholderText.textContent = "No plot data available for the selected runs.";
+        placeholderText.style.display = 'block';
+    } else {
+        // Runs selected, and either no filter or filter has results
+        placeholderText.style.display = 'none';
+    }
+}
 
 // --- Initialization ---
+function setupSearchFilter() {
+    if (!metricSearchInput) {
+        console.warn("Metric search input element not found.");
+        return;
+    }
+    // Use 'input' event for immediate feedback (handles paste, clear button, etc.)
+    metricSearchInput.addEventListener('input', handleMetricSearch);
+    console.log("Metric search filter initialized.");
+}
+
 async function initialize() {
     // Ensure tooltip element exists before proceeding
     if (!plotTooltip) {
@@ -1725,15 +1651,9 @@ async function initialize() {
     }
 
     console.log("Initializing p-board...");
-    setupSidebarToggle(); // Setup BOTH collapse/reopen button listeners
-    setupResizer();       // Setup sidebar drag-to-resize
     setupBulkActions();   // Setup "Select All" / "Deselect All" buttons
+    setupSearchFilter();   // <-- NEW: Setup search listener
     await fetchRuns();    // Fetch the list of available runs from the backend
-
-    // Set initial state of the placeholder text
-    if (placeholderText) {
-        placeholderText.style.display = selectedRuns.length === 0 ? 'block' : 'none';
-    }
 
     // Start the main animation loop
     requestAnimationFrame(updateDashboard);

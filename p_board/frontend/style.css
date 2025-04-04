@@ -12,6 +12,7 @@
     --text-placeholder: #7a8087; /* Adjusted placeholder */
     --accent-primary: #3e92cc; /* Primary accent (blue) */
     --accent-secondary: #68b3e9; /* Lighter accent / hover */
+    --accent-primary-rgb: 62, 146, 204; /* NEW: RGB for accent */
     --error-color: #e55353;
     --error-bg: rgba(229, 83, 83, 0.1);
 
@@ -315,6 +316,8 @@ a:hover, a:focus {
     background-color: var(--bg-dark);
     padding: var(--spacing-lg);
     overflow-y: auto;
+    display: flex; /* Use flexbox for layout */
+    flex-direction: column; /* Stack children vertically */
     height: 100%;
     grid-column: 3 / 4;
     /* Add padding-left to avoid content potentially going under the reopen button */
@@ -323,9 +326,67 @@ a:hover, a:focus {
     /* Alternatively, rely on the button's z-index */
 }
 
+#search-bar-container {
+    padding: 0 var(--spacing-md) var(--spacing-lg); /* Add padding around search bar */
+    flex-shrink: 0; /* Prevent search bar from shrinking */
+    background-color: var(--bg-dark); /* Match main content background */
+    /* border-bottom: 1px solid var(--border-color); /* Optional separator */
+    /* margin-bottom: var(--spacing-lg); /* Adjusted padding instead */
+}
+
+#metric-search-input {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-base);
+    color: var(--text-primary);
+    background-color: var(--bg-medium); /* Slightly lighter background */
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    appearance: none; /* Override default browser styling */
+    line-height: 1.4; /* Ensure text fits nicely */
+}
+
+#metric-search-input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb) / 0.3); /* Optional focus ring */
+}
+
+#metric-search-input::placeholder {
+    color: var(--text-placeholder);
+    opacity: 1; /* Firefox */
+}
+
+/* Style the clear button (X) in WebKit browsers */
+#metric-search-input::-webkit-search-cancel-button {
+    appearance: none;
+    height: 1em;
+    width: 1em;
+    margin-left: 0.5em;
+    /* Simple cross icon using SVG */
+    background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%237a8087'%3E%3Cpath d='M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: contain;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity var(--transition-fast);
+}
+#metric-search-input:placeholder-shown::-webkit-search-cancel-button {
+    /* Hide cancel button when placeholder is shown (i.e., input is empty) */
+    display: none;
+}
+#metric-search-input::-webkit-search-cancel-button:hover {
+    opacity: 1;
+}
+
 /* Dashboard Grid */
 #dashboard-container {
     gap: var(--spacing-lg); /* Keep or adjust */
+    flex-grow: 1; /* Allow dashboard to fill remaining space */
+    overflow-y: auto; /* Make dashboard scrollable if needed */
+    padding: 0 var(--spacing-lg) var(--spacing-lg); /* Adjust padding if search bar has it */
 }
 .metric-group-plots {
     /* display: grid; Keep grid */
