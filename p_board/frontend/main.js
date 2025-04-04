@@ -19,7 +19,7 @@ const deselectAllBtn = document.getElementById('deselect-all-runs');
 const plotTooltip = document.getElementById('plot-tooltip'); // Tooltip Element
 
 // --- Configuration ---
-const API_BASE_URL = 'http://localhost:5001'; // Adjust if backend runs elsewhere
+const API_BASE_URL = ''; // <-- NEW: Requests will go to the same origin
 const AXIS_DIVISIONS = 8; // Number of ticks/labels on axes
 const AXIS_TEXT_STYLE = {
     font: getComputedStyle(document.documentElement).getPropertyValue('--axis-font') || '10px sans-serif',
