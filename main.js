@@ -700,39 +700,40 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo) {
     });
 
     canvas.addEventListener('wheel', (e) => {
-        e.preventDefault(); // Prevent page scroll
-        const zoomFactor = 1.1;
-        const scaleDelta = e.deltaY < 0 ? zoomFactor : 1 / zoomFactor; // Zoom in or out
+        if (e.shiftKey) {
+            e.preventDefault(); // Prevent page scroll when Shift is pressed
+            const zoomFactor = 1.1;
+            const scaleDelta = e.deltaY < 0 ? zoomFactor : 1 / zoomFactor; // Zoom in or out
 
-        // Get cursor position in NDC
-        const cursorNDC_X = (2 * (e.offsetX * devicePixelRatio - canvas.width / 2)) / canvas.width;
-        const cursorNDC_Y = (-2 * (e.offsetY * devicePixelRatio - canvas.height / 2)) / canvas.height;
+            // Get cursor position in NDC
+            const cursorNDC_X = (2 * (e.offsetX * devicePixelRatio - canvas.width / 2)) / canvas.width;
+            const cursorNDC_Y = (-2 * (e.offsetY * devicePixelRatio - canvas.height / 2)) / canvas.height;
 
-        const gScaleXOld = wglp.gScaleX;
-        const gScaleYOld = wglp.gScaleY;
+            const gScaleXOld = wglp.gScaleX;
+            const gScaleYOld = wglp.gScaleY;
 
-        // Calculate new scale
-        let newScaleX = gScaleXOld * scaleDelta;
-        let newScaleY = gScaleYOld * scaleDelta;
+            // Calculate new scale
+            let newScaleX = gScaleXOld * scaleDelta;
+            let newScaleY = gScaleYOld * scaleDelta;
 
-        // Clamp the new scale to prevent extreme zoom
-        newScaleX = Math.max(1e-6, Math.min(1e6, newScaleX));
-        newScaleY = Math.max(1e-6, Math.min(1e6, newScaleY));
+            // Clamp the new scale to prevent extreme zoom
+            newScaleX = Math.max(1e-6, Math.min(1e6, newScaleX));
+            newScaleY = Math.max(1e-6, Math.min(1e6, newScaleY));
 
-        // Calculate scale change factor, avoid division by zero
-        const actualScaleChangeX = (Math.abs(gScaleXOld) > 1e-9) ? newScaleX / gScaleXOld : 1;
-        const actualScaleChangeY = (Math.abs(gScaleYOld) > 1e-9) ? newScaleY / gScaleYOld : 1;
+            // Calculate scale change factor, avoid division by zero
+            const actualScaleChangeX = (Math.abs(gScaleXOld) > 1e-9) ? newScaleX / gScaleXOld : 1;
+            const actualScaleChangeY = (Math.abs(gScaleYOld) > 1e-9) ? newScaleY / gScaleYOld : 1;
 
-        // Adjust offset to keep the point under the cursor stationary
-        // newOffset = cursorNDC + (oldOffset - cursorNDC) * (newScale / oldScale)
-         wglp.gOffsetX = cursorNDC_X + (wglp.gOffsetX - cursorNDC_X) * actualScaleChangeX;
-         wglp.gOffsetY = cursorNDC_Y + (wglp.gOffsetY - cursorNDC_Y) * actualScaleChangeY;
+            // Adjust offset to keep the point under the cursor stationary
+            // newOffset = cursorNDC + (oldOffset - cursorNDC) * (newScale / oldScale)
+            wglp.gOffsetX = cursorNDC_X + (wglp.gOffsetX - cursorNDC_X) * actualScaleChangeX;
+            wglp.gOffsetY = cursorNDC_Y + (wglp.gOffsetY - cursorNDC_Y) * actualScaleChangeY;
 
-
-        // Apply the clamped new scale
-        wglp.gScaleX = newScaleX;
-        wglp.gScaleY = newScaleY;
-         // console.log(`Wheeled: Delta=${scaleDelta.toFixed(2)} Scale=(${wglp.gScaleX.toFixed(2)}, ${wglp.gScaleY.toFixed(2)}) Offset=(${wglp.gOffsetX.toFixed(2)}, ${wglp.gOffsetY.toFixed(2)})`);
+            // Apply the clamped new scale
+            wglp.gScaleX = newScaleX;
+            wglp.gScaleY = newScaleY;
+            // console.log(`Wheeled: Delta=${scaleDelta.toFixed(2)} Scale=(${wglp.gScaleX.toFixed(2)}, ${wglp.gScaleY.toFixed(2)}) Offset=(${wglp.gOffsetX.toFixed(2)}, ${wglp.gOffsetY.toFixed(2)})`);
+        }
     });
 
     // --- Basic Touch (Similar logic, simplified) ---
