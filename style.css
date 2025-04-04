@@ -46,6 +46,8 @@
     /* --- NEW: Collapsed state variables --- */
     --sidebar-collapsed-width: 0px; /* Collapsed width */
     --resizer-collapsed-width: 0px; /* Hide resizer when collapsed */
+    --reopen-button-width: 30px;
+    --reopen-button-offset: 5px; /* How far from the edge */
 }
 
 /* Basic Reset */
@@ -88,73 +90,71 @@ a:hover, a:focus {
     display: grid;
     grid-template-columns: var(--sidebar-width) var(--resizer-width) 1fr;
     height: 100vh;
-    transition: grid-template-columns var(--transition-medium); /* Animate grid change */
+    transition: grid-template-columns var(--transition-medium);
+    position: relative; /* Needed for absolute positioning of reopen btn */
 }
 
 /* Sidebar Styling */
 #sidebar {
+    /* ... (keep existing sidebar styles) ... */
     background-color: var(--bg-medium);
     border-right: 1px solid var(--border-color);
     padding: var(--spacing-lg) var(--spacing-md);
     display: flex;
     flex-direction: column;
-    overflow-y: auto; /* Allow sidebar itself to scroll if needed */
-    overflow-x: hidden; /* Prevent content overflow */
+    overflow-y: auto;
+    overflow-x: hidden;
     height: 100%;
-    min-width: var(--sidebar-min-width); /* Apply min width */
-    max-width: var(--sidebar-max-width); /* Apply max width */
-    width: var(--sidebar-width); /* Explicit width for transition */
+    min-width: var(--sidebar-min-width);
+    max-width: var(--sidebar-max-width);
+    width: var(--sidebar-width);
     transition: width var(--transition-medium),
                 min-width var(--transition-medium),
                 padding var(--transition-medium),
                 border var(--transition-medium),
-                opacity var(--transition-medium); /* Animate properties */
+                opacity var(--transition-medium);
     opacity: 1;
+    z-index: 10; /* Ensure sidebar is above reopen button if needed */
 }
 
 #resizer {
-    grid-column: 2 / 3; /* Position in the second grid column */
+    /* ... (keep existing resizer styles) ... */
+    grid-column: 2 / 3;
     cursor: col-resize;
-    background-color: var(--border-color); /* Make it visible */
+    background-color: var(--border-color);
     height: 100%;
-    width: var(--resizer-width); /* Explicit width for transition */
+    width: var(--resizer-width);
     transition: background-color var(--transition-fast),
                 width var(--transition-medium),
-                opacity var(--transition-medium); /* Animate width and visibility */
+                opacity var(--transition-medium);
     opacity: 1;
-    /* Optional: Add a subtle hover effect */
-    &:hover {
-        background-color: var(--accent-secondary);
-    }
-    /* Prevent text selection during drag */
     user-select: none;
-    -webkit-user-select: none;
-    -moz-user-select: none;
-    -ms-user-select: none;
+    z-index: 10; /* Ensure resizer is above reopen button */
+}
+#resizer:hover {
+     background-color: var(--accent-secondary);
 }
 
 .sidebar-header {
+    /* ... (keep existing header styles) ... */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     padding-bottom: var(--spacing-md);
     margin-bottom: var(--spacing-lg);
     border-bottom: 1px solid var(--border-color);
-    display: flex; /* Use flexbox */
-    justify-content: space-between; /* Space title and button */
-    align-items: center; /* Vertically align */
-    flex-shrink: 0; /* Prevent header from shrinking */
+    flex-shrink: 0;
 }
-
-.sidebar-header h2 {
+.sidebar-header h2 { /* Keep */
     font-size: var(--font-size-large);
     font-weight: 600;
     color: var(--text-primary);
-    margin: 0; /* Remove default margin */
-    white-space: nowrap; /* Prevent wrapping */
+    margin: 0;
+    white-space: nowrap;
 }
-
-/* --- NEW: Toggle Button Styles --- */
-#sidebar-toggle-btn {
+#sidebar-toggle-btn { /* Keep */
     background: none;
-    border: 1px solid transparent; /* Transparent border for consistent size */
+    border: 1px solid transparent;
     color: var(--text-secondary);
     font-size: var(--font-size-large);
     font-weight: bold;
@@ -163,15 +163,49 @@ a:hover, a:focus {
     line-height: 1;
     border-radius: var(--border-radius);
     transition: background-color var(--transition-fast), color var(--transition-fast);
-    margin-left: var(--spacing-md); /* Space from title */
-    flex-shrink: 0; /* Prevent button shrinking */
+    margin-left: var(--spacing-md);
+    flex-shrink: 0;
 }
-
-#sidebar-toggle-btn:hover {
+#sidebar-toggle-btn:hover { /* Keep */
     background-color: var(--bg-light);
     color: var(--text-primary);
 }
-#sidebar-toggle-btn:focus-visible {
+#sidebar-toggle-btn:focus-visible { /* Keep */
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 1px;
+}
+
+/* --- NEW: Reopen Button Styles --- */
+#sidebar-reopen-btn {
+    position: absolute; /* Position relative to app-container */
+    top: var(--spacing-md); /* Align near top */
+    left: var(--reopen-button-offset);
+    width: var(--reopen-button-width);
+    height: var(--reopen-button-width);
+    background-color: var(--bg-light);
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    font-size: var(--font-size-large);
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 50%; /* Make it round */
+    display: none; /* Hidden by default */
+    place-items: center; /* Center the icon */
+    z-index: 20; /* Ensure it's above other elements */
+    opacity: 0.8;
+    transition: background-color var(--transition-fast),
+                color var(--transition-fast),
+                opacity var(--transition-medium),
+                transform var(--transition-medium);
+}
+
+#sidebar-reopen-btn:hover {
+    background-color: hsl(from var(--bg-light) h s calc(l + 8%));
+    color: var(--text-primary);
+    opacity: 1;
+}
+
+#sidebar-reopen-btn:focus-visible {
     outline: 2px solid var(--accent-primary);
     outline-offset: 1px;
 }
@@ -211,428 +245,111 @@ a:hover, a:focus {
 /* --- NEW: Styles for Collapsed State --- */
 
 #app-container.sidebar-collapsed {
-    /* Change grid to remove sidebar and resizer space */
     grid-template-columns: var(--sidebar-collapsed-width) var(--resizer-collapsed-width) 1fr;
 }
 
 #app-container.sidebar-collapsed #sidebar {
     width: var(--sidebar-collapsed-width);
-    min-width: var(--sidebar-collapsed-width); /* Crucial */
+    min-width: var(--sidebar-collapsed-width);
     padding-left: 0;
     padding-right: 0;
     border-right-width: 0;
-    opacity: 0; /* Fade out */
-    overflow: hidden; /* Hide content completely */
+    opacity: 0;
+    overflow: hidden;
+    /* Make sure the original toggle button is not clickable when hidden */
+    pointer-events: none;
 }
 
 #app-container.sidebar-collapsed #resizer {
     width: var(--resizer-collapsed-width);
     opacity: 0;
-    cursor: default; /* Change cursor when hidden */
+    cursor: default;
+    pointer-events: none; /* Not interactive when hidden */
 }
 
-/* Change toggle button icon when collapsed */
-#app-container.sidebar-collapsed #sidebar-toggle-btn {
-    /* You might want to move the button outside the sidebar
-       when collapsed for discoverability, but for simplicity,
-       we just change the icon. It will disappear with the sidebar.
-       A floating button approach would be more complex. */
-    /* content: '»'; */ /* This doesn't work on button content */
-    /* Let's just keep the button as is, it will hide with the sidebar */
+/* --- NEW: Show Reopen Button when Collapsed --- */
+#app-container.sidebar-collapsed #sidebar-reopen-btn {
+    display: grid; /* Use grid to center content */
 }
 
 
-#controls-container {
-    flex-grow: 1; /* Allow controls to take available space */
-    display: flex;
-    flex-direction: column;
-    min-height: 0; /* Prevent flex item from overflowing */
-}
-
-#controls-container h3 {
-    font-size: var(--font-size-medium);
-    color: var(--text-secondary);
-    margin-bottom: var(--spacing-md);
-    font-weight: 600;
-}
-
-/* Run Selector List */
-#run-selector {
-    flex-grow: 1; /* Take remaining space in controls container */
-    overflow-y: auto;
-    border: 1px solid var(--border-color);
-    background-color: var(--bg-dark); /* Slightly different bg */
-    border-radius: var(--border-radius);
-    padding: var(--spacing-sm);
-    margin-bottom: var(--spacing-md);
-    min-height: 150px; /* Ensure it has some minimum height */
-}
-
-#run-selector p { /* Loading/Empty message */
-    color: var(--text-placeholder);
-    padding: var(--spacing-md);
-    text-align: center;
-}
-
-.run-checkbox-item {
-    display: flex;
-    align-items: center;
-    padding: var(--spacing-sm) var(--spacing-md);
-    border-radius: calc(var(--border-radius) / 1.5);
-    margin-bottom: var(--spacing-xs);
-    transition: background-color var(--transition-fast);
-    cursor: pointer;
-}
-
-.run-checkbox-item:hover {
-    background-color: var(--bg-light);
-}
-
-.run-checkbox-item label {
-    margin-left: var(--spacing-sm);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    flex-grow: 1;
-    color: var(--text-primary);
-    font-size: var(--font-size-base); /* Match base font size */
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.run-checkbox-item input[type="checkbox"] {
-    margin: 0;
-    cursor: pointer;
-    accent-color: var(--accent-primary);
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-    background-color: var(--bg-dark); /* Ensure contrast */
-    border: 1px solid var(--border-color);
-    border-radius: 3px;
-    appearance: none; /* Remove default styling */
-    display: grid; /* Center checkmark */
-    place-content: center;
-}
-.run-checkbox-item input[type="checkbox"]::before {
-    content: "";
-    width: 0.65em;
-    height: 0.65em;
-    transform: scale(0);
-    transition: 120ms transform ease-in-out;
-    box-shadow: inset 1em 1em var(--accent-primary);
-    /* Checkmark using clip-path */
-    clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
-}
-.run-checkbox-item input[type="checkbox"]:checked::before {
-    transform: scale(1);
-}
-
-/* Focus style for accessibility */
-.run-checkbox-item input[type="checkbox"]:focus-visible {
-    outline: 2px solid var(--accent-primary);
-    outline-offset: 2px;
-}
-
-
-.color-swatch {
-    display: inline-block;
-    width: 12px;
-    height: 12px;
-    border: 1px solid var(--border-color);
-    margin-right: var(--spacing-sm);
-    flex-shrink: 0;
-    border-radius: 3px;
-}
-
-/* Loading/Error indicators in sidebar */
-#loading-indicator {
-    font-size: var(--font-size-small);
-    color: var(--text-secondary);
-    margin-top: var(--spacing-sm);
-    display: flex;
-    align-items: center;
-    padding: 0 var(--spacing-md);
-}
-#loading-indicator::before { /* Spinner */
-    content: '';
-    display: inline-block;
-    width: 0.9em;
-    height: 0.9em;
-    border: 2px solid currentColor;
-    border-right-color: transparent;
-    border-radius: 50%;
-    animation: spinner 0.75s linear infinite;
-    margin-right: var(--spacing-sm);
-}
+#controls-container { flex-grow: 1; display: flex; flex-direction: column; min-height: 0; }
+#controls-container h3 { font-size: var(--font-size-medium); color: var(--text-secondary); margin-bottom: var(--spacing-md); font-weight: 600; }
+#run-bulk-controls { display: flex; gap: var(--spacing-sm); margin-bottom: var(--spacing-md); flex-shrink: 0; }
+.bulk-action-btn { flex-grow: 1; padding: var(--spacing-xs) var(--spacing-sm); font-size: var(--font-size-small); background-color: var(--bg-light); border: 1px solid var(--border-color); color: var(--text-secondary); border-radius: var(--border-radius); cursor: pointer; transition: background-color var(--transition-fast), color var(--transition-fast); text-align: center; }
+.bulk-action-btn:hover { background-color: hsl(from var(--bg-light) h s calc(l + 5%)); color: var(--text-primary); }
+.bulk-action-btn:active { background-color: hsl(from var(--bg-light) h s calc(l - 5%)); }
+.bulk-action-btn:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; }
+#run-selector { flex-grow: 1; overflow-y: auto; border: 1px solid var(--border-color); background-color: var(--bg-dark); border-radius: var(--border-radius); padding: var(--spacing-sm); margin-bottom: var(--spacing-md); min-height: 150px; }
+#run-selector p { color: var(--text-placeholder); padding: var(--spacing-md); text-align: center; }
+.run-checkbox-item { display: flex; align-items: center; padding: var(--spacing-sm) var(--spacing-md); border-radius: calc(var(--border-radius) / 1.5); margin-bottom: var(--spacing-xs); transition: background-color var(--transition-fast); cursor: pointer; }
+.run-checkbox-item:hover { background-color: var(--bg-light); }
+.run-checkbox-item label { margin-left: var(--spacing-sm); cursor: pointer; display: inline-flex; align-items: center; flex-grow: 1; color: var(--text-primary); font-size: var(--font-size-base); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.run-checkbox-item input[type="checkbox"] { margin: 0; cursor: pointer; accent-color: var(--accent-primary); width: 16px; height: 16px; flex-shrink: 0; background-color: var(--bg-dark); border: 1px solid var(--border-color); border-radius: 3px; appearance: none; display: grid; place-content: center; }
+.run-checkbox-item input[type="checkbox"]::before { content: ""; width: 0.65em; height: 0.65em; transform: scale(0); transition: 120ms transform ease-in-out; box-shadow: inset 1em 1em var(--accent-primary); clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%); }
+.run-checkbox-item input[type="checkbox"]:checked::before { transform: scale(1); }
+.run-checkbox-item input[type="checkbox"]:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.color-swatch { display: inline-block; width: 12px; height: 12px; border: 1px solid var(--border-color); margin-right: var(--spacing-sm); flex-shrink: 0; border-radius: 3px; }
+#loading-indicator { font-size: var(--font-size-small); color: var(--text-secondary); margin-top: var(--spacing-sm); display: flex; align-items: center; padding: 0 var(--spacing-md); }
+#loading-indicator::before { content: ''; display: inline-block; width: 0.9em; height: 0.9em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spinner 0.75s linear infinite; margin-right: var(--spacing-sm); }
 @keyframes spinner { to { transform: rotate(360deg); } }
+#error-message { font-size: var(--font-size-small); color: var(--error-color); background-color: var(--error-bg); border: 1px solid var(--error-color); padding: var(--spacing-sm) var(--spacing-md); border-radius: var(--border-radius); margin-top: var(--spacing-md); }
 
-#error-message {
-    font-size: var(--font-size-small);
-    color: var(--error-color);
-    background-color: var(--error-bg);
-    border: 1px solid var(--error-color);
-    padding: var(--spacing-sm) var(--spacing-md);
-    border-radius: var(--border-radius);
-    margin-top: var(--spacing-md);
-}
 
 /* Sidebar Footer */
-.sidebar-footer {
-    margin-top: var(--spacing-lg);
-    padding-top: var(--spacing-md);
-    border-top: 1px solid var(--border-color);
-    font-size: var(--font-size-small);
-    color: var(--text-secondary);
-    flex-shrink: 0; /* Prevent footer shrinking */
-}
-.sidebar-footer p {
-    font-weight: 600;
-    margin-bottom: var(--spacing-sm);
-}
-.sidebar-footer ul {
-    list-style: none;
-    padding-left: 0;
-}
-.sidebar-footer li {
-    margin-bottom: var(--spacing-xs);
-}
-.sidebar-footer kbd { /* Style kbd tag */
-    display: inline-block;
-    padding: 2px 6px;
-    font-family: monospace;
-    font-size: 0.9em;
-    color: var(--text-primary);
-    background-color: var(--bg-light);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    box-shadow: inset 0 -1px 0 var(--border-color);
-    margin: 0 2px;
-}
+.sidebar-footer { margin-top: var(--spacing-lg); padding-top: var(--spacing-md); border-top: 1px solid var(--border-color); font-size: var(--font-size-small); color: var(--text-secondary); flex-shrink: 0; }
+.sidebar-footer p { font-weight: 600; margin-bottom: var(--spacing-sm); }
+.sidebar-footer ul { list-style: none; padding-left: 0; }
+.sidebar-footer li { margin-bottom: var(--spacing-xs); }
+.sidebar-footer kbd { display: inline-block; padding: 2px 6px; font-family: monospace; font-size: 0.9em; color: var(--text-primary); background-color: var(--bg-light); border: 1px solid var(--border-color); border-radius: 4px; box-shadow: inset 0 -1px 0 var(--border-color); margin: 0 2px; }
 
 
 /* Main Content Area Styling */
 #main-content {
     background-color: var(--bg-dark);
     padding: var(--spacing-lg);
-    overflow-y: auto; /* Allow plots area to scroll */
+    overflow-y: auto;
     height: 100%;
-    grid-column: 3 / 4; /* Position in the third grid column */
+    grid-column: 3 / 4;
+    /* Add padding-left to avoid content potentially going under the reopen button */
+    /* Adjust value based on button width and offset */
+    /* padding-left: calc(var(--reopen-button-width) + var(--reopen-button-offset) * 2); */
+    /* Alternatively, rely on the button's z-index */
 }
 
 /* Dashboard Grid */
-#dashboard-container {
-    /* display: grid; */ /* REMOVE or COMMENT OUT this line */
-    /* grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); */ /* REMOVE or COMMENT OUT this line */
-    /* gap: var(--spacing-lg); */ /* REMOVE or COMMENT OUT this line */
-    display: flex; /* Use flexbox for vertical stacking */
-    flex-direction: column;
-    gap: var(--spacing-lg); /* Keep the gap between groups */
-}
-
-.metric-group {
-    background-color: var(--bg-medium); /* Optional: slight bg tint */
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
-    /* box-shadow: var(--box-shadow); */ /* Optional: Shadow on groups */
-    overflow: hidden; /* Contain elements */
-    /* margin-bottom: var(--spacing-lg); */ /* Gap handled by flex parent */
-}
-
-.metric-group-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-sm) var(--spacing-md);
-    background-color: var(--bg-light); /* Header background */
-    border-bottom: 1px solid var(--border-color);
-    cursor: pointer;
-    transition: background-color var(--transition-fast);
-}
-
-.metric-group-header:hover {
-    background-color: hsl(from var(--bg-light) h s calc(l + 5%)); /* Slightly lighter on hover */
-}
-
-
-.metric-group-header h3 {
-    font-size: var(--font-size-medium);
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0;
-    flex-grow: 1; /* Take available space */
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.toggle-button {
-    background: none;
-    border: none;
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: 1.2em; /* Adjust size */
-    padding: 0 var(--spacing-sm);
-    line-height: 1;
-    transition: transform var(--transition-fast);
-    flex-shrink: 0; /* Prevent shrinking */
-}
-
-/* Simple +/- icon using pseudo-elements */
-.toggle-button::before {
-    content: '−'; /* Minus sign for expanded */
-    display: inline-block;
-    width: 1em;
-    text-align: center;
-}
-
-.metric-group.collapsed .toggle-button::before {
-    content: '+'; /* Plus sign for collapsed */
-}
-
-/* Alternative: Rotate a chevron (requires an element like <i> or <span>) */
-/* .toggle-button .icon-chevron {
-    display: inline-block;
-    transition: transform 0.2s ease-in-out;
-}
-.metric-group.collapsed .toggle-button .icon-chevron {
-    transform: rotate(-90deg);
-} */
-
-/* Focus style for the button */
-.toggle-button:focus-visible {
-    outline: 2px solid var(--accent-primary);
-    outline-offset: 1px;
-    border-radius: 3px;
-}
-
-
-.metric-group-plots {
-    display: grid; /* Use grid for plots WITHIN a group */
-    grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); /* Responsive grid for plots */
-    gap: var(--spacing-lg);
-    padding: var(--spacing-lg);
-    /* transition: opacity var(--transition-medium); */ /* Add transition for hide/show */
-}
-
-/* Style for collapsed state */
-.metric-group.collapsed .metric-group-plots {
-    display: none; /* Hide the plot container */
-    /* Optionally add animation */
-    /* max-height: 0;
-    overflow: hidden;
-    padding-top: 0;
-    padding-bottom: 0;
-    opacity: 0;
-    transition: max-height 0.3s ease-out, padding 0.3s ease-out, opacity 0.2s ease-out; */
-}
-
-/* Ensure plot wrappers don't add extra margin when inside a group */
-.metric-group-plots .plot-wrapper {
-    margin-bottom: 0; /* Remove bottom margin if set previously */
-}
-
-.placeholder-text {
-    color: var(--text-placeholder);
-    text-align: center;
-    font-size: var(--font-size-medium);
-    padding: var(--spacing-xl);
-    grid-column: 1 / -1; /* Span full grid width */
-    background-color: var(--bg-medium); /* Match plot bg */
-    border: 1px dashed var(--border-color);
-    border-radius: var(--border-radius);
-    margin: auto; /* Center it */
-    max-width: 600px;
-}
-
+#dashboard-container { display: flex; flex-direction: column; gap: var(--spacing-lg); }
+.metric-group { background-color: var(--bg-medium); border: 1px solid var(--border-color); border-radius: var(--border-radius); overflow: hidden; }
+.metric-group-header { display: flex; justify-content: space-between; align-items: center; padding: var(--spacing-sm) var(--spacing-md); background-color: var(--bg-light); border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background-color var(--transition-fast); }
+.metric-group-header:hover { background-color: hsl(from var(--bg-light) h s calc(l + 5%)); }
+.metric-group-header h3 { font-size: var(--font-size-medium); font-weight: 600; color: var(--text-primary); margin: 0; flex-grow: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.toggle-button { background: none; border: none; color: var(--text-secondary); cursor: pointer; font-size: 1.2em; padding: 0 var(--spacing-sm); line-height: 1; transition: transform var(--transition-fast); flex-shrink: 0; }
+.toggle-button::before { content: '−'; display: inline-block; width: 1em; text-align: center; }
+.metric-group.collapsed .toggle-button::before { content: '+'; }
+.toggle-button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 1px; border-radius: 3px; }
+.metric-group-plots { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); gap: var(--spacing-lg); padding: var(--spacing-lg); }
+.metric-group.collapsed .metric-group-plots { display: none; }
+.metric-group-plots .plot-wrapper { margin-bottom: 0; }
+.placeholder-text { color: var(--text-placeholder); text-align: center; font-size: var(--font-size-medium); padding: var(--spacing-xl); background-color: var(--bg-medium); border: 1px dashed var(--border-color); border-radius: var(--border-radius); margin: auto; max-width: 600px; }
 
 /* Plot Wrapper Styling */
-.plot-wrapper {
-    background-color: var(--bg-medium);
-    border: 1px solid var(--border-color);
-    border-radius: var(--border-radius);
-    box-shadow: var(--box-shadow);
-    display: flex;
-    flex-direction: column;
-    min-height: 350px; /* Ensure minimum size */
-    overflow: hidden; /* Contain children */
-}
-
-.plot-wrapper h3 { /* Plot Titles */
-    font-size: var(--font-size-base); /* Slightly smaller */
-    font-weight: 500;
-    color: var(--text-secondary);
-    padding: var(--spacing-sm) var(--spacing-md);
-    margin: 0;
-    border-bottom: 1px solid var(--border-color);
-    background-color: var(--bg-medium); /* Match card bg */
-    text-align: left; /* Align left like Datadog titles */
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-.plot-canvas {
-    width: 100%;
-    flex-grow: 1;
-    display: block;
-    background-color: var(--bg-medium); /* Match card background */
-    cursor: grab;
-    min-height: 250px; /* Ensure canvas drawing area */
-}
+.plot-wrapper { background-color: var(--bg-medium); border: 1px solid var(--border-color); border-radius: var(--border-radius); box-shadow: var(--box-shadow); display: flex; flex-direction: column; min-height: 350px; overflow: hidden; }
+.plot-wrapper h3 { font-size: var(--font-size-base); font-weight: 500; color: var(--text-secondary); padding: var(--spacing-sm) var(--spacing-md); margin: 0; border-bottom: 1px solid var(--border-color); background-color: var(--bg-medium); text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plot-canvas { width: 100%; flex-grow: 1; display: block; background-color: var(--bg-medium); cursor: grab; min-height: 250px; }
 .plot-canvas:active { cursor: grabbing; }
 .plot-canvas[style*="cursor: crosshair"] { cursor: crosshair !important; }
 .plot-canvas[style*="cursor: grabbing"] { cursor: grabbing !important; }
 
-
 /* Info Footer in Main Content */
-.info {
-    margin-top: var(--spacing-xl);
-    text-align: center;
-    font-size: var(--font-size-small);
-    color: var(--text-secondary);
-    padding-bottom: var(--spacing-md); /* Add padding at the very bottom */
-}
-.info p {
-    margin-bottom: var(--spacing-xs);
-}
-
-body.dragging-plot {
-    /* You might not need this if preventDefault on mousemove works well, */
-    /* but can be a fallback */
-     /* overflow: hidden; */
-}
+.info { margin-top: var(--spacing-xl); text-align: center; font-size: var(--font-size-small); color: var(--text-secondary); padding-bottom: var(--spacing-md); }
+.info p { margin-bottom: var(--spacing-xs); }
 
 /* Scrollbar Styling (Webkit - Chrome, Safari, Edge) */
-::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
-}
-::-webkit-scrollbar-track {
-    background: var(--bg-dark);
-    border-radius: 5px;
-}
-::-webkit-scrollbar-thumb {
-    background-color: var(--border-color);
-    border-radius: 5px;
-    border: 2px solid var(--bg-dark); /* Padding effect */
-}
-::-webkit-scrollbar-thumb:hover {
-    background-color: var(--text-secondary);
-}
-/* Apply slightly different track for sidebar */
-#sidebar::-webkit-scrollbar-track {
-     background: var(--bg-medium);
-}
-#sidebar::-webkit-scrollbar-thumb {
-     border: 2px solid var(--bg-medium);
-}
-
-/* Apply different track for run selector */
-#run-selector::-webkit-scrollbar-track {
-     background: var(--bg-dark);
-}
-#run-selector::-webkit-scrollbar-thumb {
-     border: 2px solid var(--bg-dark);
-}
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg-dark); border-radius: 5px; }
+::-webkit-scrollbar-thumb { background-color: var(--border-color); border-radius: 5px; border: 2px solid var(--bg-dark); }
+::-webkit-scrollbar-thumb:hover { background-color: var(--text-secondary); }
+#sidebar::-webkit-scrollbar-track { background: var(--bg-medium); }
+#sidebar::-webkit-scrollbar-thumb { border: 2px solid var(--bg-medium); }
+#run-selector::-webkit-scrollbar-track { background: var(--bg-dark); }
+#run-selector::-webkit-scrollbar-thumb { border: 2px solid var(--bg-dark); }

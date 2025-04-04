@@ -10,7 +10,8 @@ const errorMessageDiv = document.getElementById('error-message');
 const sidebar = document.getElementById('sidebar'); // Get sidebar
 const resizer = document.getElementById('resizer'); // Get resizer
 const mainContent = document.getElementById('main-content'); // Get main content
-const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn'); // Get toggle button
+const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn'); // Collapse button
+const sidebarReopenBtn = document.getElementById('sidebar-reopen-btn'); // Reopen button (NEW)
 const placeholderText = document.querySelector('#dashboard-container .placeholder-text'); // Get placeholder
 const runBulkControls = document.getElementById('run-bulk-controls'); // Bulk controls div
 const selectAllBtn = document.getElementById('select-all-runs');
@@ -868,6 +869,42 @@ window.addEventListener('resize', () => {
 });
 
 // --- Sidebar Resizer Logic ---
+// Combined function to handle toggling the sidebar state
+function toggleSidebar() {
+    const isCurrentlyCollapsed = appContainer.classList.contains('sidebar-collapsed');
+    appContainer.classList.toggle('sidebar-collapsed');
+
+    // Update ARIA attributes and titles (optional but good practice)
+    if (isCurrentlyCollapsed) {
+        // Expanding
+        sidebarToggleBtn.title = "Collapse Sidebar";
+        sidebarReopenBtn.setAttribute('aria-expanded', 'false'); // Reopen button is now hidden
+        sidebarToggleBtn.setAttribute('aria-expanded', 'true'); // Original button is now visible
+    } else {
+        // Collapsing
+        sidebarToggleBtn.title = "Expand Sidebar"; // Title changes on the button *about* to be hidden
+        sidebarReopenBtn.title = "Expand Sidebar";
+        sidebarToggleBtn.setAttribute('aria-expanded', 'false');
+        sidebarReopenBtn.setAttribute('aria-expanded', 'true'); // Reopen button is now visible
+    }
+
+    // Important: Trigger resize after transition
+    setTimeout(() => {
+        // console.log("Triggering resize after sidebar toggle");
+        window.dispatchEvent(new Event('resize'));
+    }, 300); // Match transition duration + buffer
+}
+
+function setupSidebarToggle() {
+    // Attach the *same* toggle function to both buttons
+    sidebarToggleBtn.addEventListener('click', toggleSidebar);
+    sidebarReopenBtn.addEventListener('click', toggleSidebar); // NEW
+
+    // Initial ARIA state (assuming starts expanded)
+    sidebarToggleBtn.setAttribute('aria-expanded', 'true');
+    sidebarReopenBtn.setAttribute('aria-expanded', 'false');
+}
+
 function setupResizer() {
     const minSidebarWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-min-width'), 10);
     const maxSidebarWidth = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--sidebar-max-width'), 10);
@@ -913,37 +950,16 @@ function setupResizer() {
 }
 
 
-// --- Sidebar Toggle Logic ---
-function setupSidebarToggle() {
-    sidebarToggleBtn.addEventListener('click', () => {
-        appContainer.classList.toggle('sidebar-collapsed');
-
-        const isCollapsed = appContainer.classList.contains('sidebar-collapsed');
-        sidebarToggleBtn.textContent = isCollapsed ? '>' : '<'; // Change button text
-        sidebarToggleBtn.title = isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar';
-
-        // Important: After the transition, trigger a resize event
-        // so plots can adjust to the new main content width.
-        // Use a timeout slightly longer than the CSS transition duration.
-        setTimeout(() => {
-             console.log("Triggering resize after sidebar toggle");
-            window.dispatchEvent(new Event('resize'));
-        }, 300); // Match transition duration (0.25s) + buffer
-    });
-}
-
-
 // --- Initialization ---
 async function initialize() {
-    setupSidebarToggle(); // Setup collapse button listener
-    setupResizer(); // Setup sidebar resize listener
-    setupBulkActions(); // Setup Select/Deselect All
+    setupSidebarToggle(); // Setup BOTH collapse/reopen button listeners
+    setupResizer();
+    setupBulkActions();
     await fetchRuns();
-    // Display placeholder initially if no runs are selected
-     if (placeholderText) {
-         placeholderText.style.display = selectedRuns.length === 0 ? 'block' : 'none';
-     }
-    requestAnimationFrame(updateDashboard); // Start animation loop
+    if (placeholderText) {
+        placeholderText.style.display = selectedRuns.length === 0 ? 'block' : 'none';
+    }
+    requestAnimationFrame(updateDashboard);
 }
 
 initialize();
