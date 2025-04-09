@@ -26,58 +26,223 @@ const AXIS_TEXT_STYLE = {
     tickSize: 6, // Slightly larger ticks
 };
 const TOOLTIP_CLOSENESS_THRESHOLD_PX_SQ = 15 * 15; // Squared pixel distance threshold for tooltip activation
+/**
+ * Resizes the main canvas, WebGL viewport, and axis canvases for a given plot.
+ * @param {object} plotInfo The plot info object.
+ */
+function resizePlot(plotInfo) {
+    if (!plotInfo || !plotInfo.canvas || !plotInfo.wglp) {
+        console.warn("resizePlot called with invalid plotInfo for:", plotInfo?.metricName);
+        return;
+    }
+
+    const { canvas, wglp, xAxisCanvas, yAxisCanvas, metricName } = plotInfo;
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    let resized = false;
+
+    // --- Resize Main Canvas ---
+    // Read current client dimensions AFTER layout changes
+    const mainClientWidth = canvas.clientWidth;
+    const mainClientHeight = canvas.clientHeight;
+
+    if (mainClientWidth <= 0 || mainClientHeight <= 0) {
+        // Avoid resizing if the canvas isn't actually visible or has no size
+        // console.warn(`Skipping resize for ${metricName}: Zero client dimensions.`);
+        return;
+    }
+
+    const newWidth = Math.round(mainClientWidth * devicePixelRatio);
+    const newHeight = Math.round(mainClientHeight * devicePixelRatio);
+
+    // Only resize if dimensions actually changed to avoid unnecessary work
+    if (canvas.width !== newWidth || canvas.height !== newHeight) {
+        canvas.width = newWidth;
+        canvas.height = newHeight;
+        // console.log(`Resized main canvas for ${metricName} to ${newWidth}x${newHeight}`);
+
+        // Update WebGL viewport
+        wglp.viewport(0, 0, newWidth, newHeight);
+        resized = true;
+    }
+
+    // --- Resize Axis Canvases ---
+    // sizeAxisCanvases reads the client dimensions of axis canvases and updates them
+    // It also re-initializes the 2D contexts if necessary
+    const axesResized = sizeAxisCanvases(plotInfo); // Modify sizeAxisCanvases to return true if resized
+
+    // Log if anything was resized for debugging
+    // if (resized || axesResized) {
+    //     console.log(`resizePlot completed for ${metricName}. Main resized: ${resized}, Axes resized: ${axesResized}`);
+    // }
+
+    // The main animation loop (updateDashboard) will automatically redraw
+    // the WebGL plot and the axes with the new sizes/viewports.
+}
 
 /**
- * Initializes a 2D canvas for axis drawing.
+ * Initializes or resizes an axis canvas and returns its 2D context.
+ * Now returns true if a resize occurred, false otherwise.
  * @param {HTMLCanvasElement} canvas
- * @returns {CanvasRenderingContext2D | null}
+ * @returns {{ctx: CanvasRenderingContext2D | null, resized: boolean}}
  */
 function initAxisCanvas(canvas) {
-    if (!canvas) return null;
+    if (!canvas) return { ctx: null, resized: false };
+    let resized = false;
     try {
         const devicePixelRatio = window.devicePixelRatio || 1;
-        // Ensure client dimensions are read correctly *after* layout
         const clientWidth = canvas.clientWidth;
         const clientHeight = canvas.clientHeight;
 
         if (clientWidth <= 0 || clientHeight <= 0) {
-             console.warn("Axis canvas has zero client dimensions during init", canvas.id);
-             // Set a minimal size to avoid errors, will be corrected on resize
-             canvas.width = 1 * devicePixelRatio;
-             canvas.height = 1 * devicePixelRatio;
+            // console.warn("Axis canvas has zero client dimensions during init/resize", canvas.id);
+            // Keep minimal size if already set, otherwise set it. Avoid repeated setting.
+            const minWidth = 1 * devicePixelRatio;
+            const minHeight = 1 * devicePixelRatio;
+            if (canvas.width !== minWidth || canvas.height !== minHeight) {
+                 canvas.width = minWidth;
+                 canvas.height = minHeight;
+                 resized = true; // Considered a resize if we set minimal dimensions
+            }
         } else {
-            canvas.width = Math.round(clientWidth * devicePixelRatio);
-            canvas.height = Math.round(clientHeight * devicePixelRatio);
+            const newWidth = Math.round(clientWidth * devicePixelRatio);
+            const newHeight = Math.round(clientHeight * devicePixelRatio);
+            if (canvas.width !== newWidth || canvas.height !== newHeight) {
+                canvas.width = newWidth;
+                canvas.height = newHeight;
+                resized = true;
+                // console.log(`Resized axis canvas ${canvas.id} to ${newWidth}x${newHeight}`);
+            }
         }
-
 
         const ctx = canvas.getContext('2d');
         if (ctx) {
+            // Always reset styles as context might be new or state lost after resize
             ctx.font = AXIS_TEXT_STYLE.font;
             ctx.fillStyle = AXIS_TEXT_STYLE.fillStyle;
             ctx.strokeStyle = AXIS_TEXT_STYLE.strokeStyle;
-            ctx.lineWidth = 1; // Ensure thin lines for ticks
+            ctx.lineWidth = 1;
+        } else {
+            console.error("Failed to get 2D context for axis canvas:", canvas.id);
         }
-        return ctx;
+        return { ctx: ctx, resized: resized };
     } catch (e) {
-        console.error("Error initializing axis canvas:", canvas.id, e);
-        return null;
+        console.error("Error initializing/resizing axis canvas:", canvas.id, e);
+        return { ctx: null, resized: false }; // Indicate failure
     }
 }
 
+
 /**
  * Resizes both axis canvases for a given plotInfo.
+ * Returns true if either axis canvas was resized, false otherwise.
  * @param {object} plotInfo The plot info object containing axis canvases.
+ * @returns {boolean} True if resizing occurred for either axis.
  */
 function sizeAxisCanvases(plotInfo) {
-    if (plotInfo.xAxisCanvas && plotInfo.ctxX) {
-        const ctxX = initAxisCanvas(plotInfo.xAxisCanvas);
-        if (ctxX) plotInfo.ctxX = ctxX; // Update context if re-initialized
+    let resizedX = false;
+    let resizedY = false;
+
+    if (plotInfo.xAxisCanvas) {
+        const resultX = initAxisCanvas(plotInfo.xAxisCanvas);
+        if (resultX.ctx) plotInfo.ctxX = resultX.ctx;
+        else console.warn(`Failed to update ctxX for ${plotInfo.metricName}`);
+        resizedX = resultX.resized;
     }
-     if (plotInfo.yAxisCanvas && plotInfo.ctxY) {
-         const ctxY = initAxisCanvas(plotInfo.yAxisCanvas);
-         if (ctxY) plotInfo.ctxY = ctxY; // Update context if re-initialized
+     if (plotInfo.yAxisCanvas) {
+         const resultY = initAxisCanvas(plotInfo.yAxisCanvas);
+         if (resultY.ctx) plotInfo.ctxY = resultY.ctx;
+         else console.warn(`Failed to update ctxY for ${plotInfo.metricName}`);
+         resizedY = resultY.resized;
      }
+     return resizedX || resizedY; // Return true if either axis was resized
+}
+// --- Search/Filter Logic ---
+function handleMetricSearch() {
+    if (!metricSearchInput) return; // Safety check
+
+    const searchTerm = metricSearchInput.value.toLowerCase().trim();
+    const allMetricGroups = dashboardContainer.querySelectorAll('.metric-group');
+    let anyPlotVisibleOverall = false;
+    const visiblePlotsToResize = []; // Keep track of plots that might need resizing
+
+    allMetricGroups.forEach(groupContainer => {
+        const groupPlotsContainer = groupContainer.querySelector('.metric-group-plots');
+        const plotWrappers = groupPlotsContainer ? groupPlotsContainer.querySelectorAll('.plot-wrapper') : [];
+        let groupHasVisiblePlots = false;
+
+        plotWrappers.forEach(wrapper => {
+            const metricName = wrapper.dataset.metricName; // Get original metric name
+            const metricNameLower = metricName?.toLowerCase();
+            let isMatch = false;
+
+            if (metricNameLower) {
+                isMatch = searchTerm === '' || metricNameLower.includes(searchTerm);
+            } else {
+                isMatch = searchTerm === '';
+            }
+
+            // Show/hide individual plot
+            const shouldDisplay = isMatch ? '' : 'none';
+            if (wrapper.style.display !== shouldDisplay) {
+                 wrapper.style.display = shouldDisplay;
+            }
+
+
+            if (isMatch && metricName && activePlots[metricName]) {
+                groupHasVisiblePlots = true;
+                anyPlotVisibleOverall = true;
+                // Add the plotInfo to the list to check for resize later
+                visiblePlotsToResize.push(activePlots[metricName]);
+            }
+        });
+
+        // Show/hide the entire group container
+        const showGroup = searchTerm === '' || groupHasVisiblePlots;
+         if (groupContainer.style.display !== (showGroup ? '' : 'none')) {
+            groupContainer.style.display = showGroup ? '' : 'none';
+         }
+    });
+
+    // --- Schedule Resize Check ---
+    // Use requestAnimationFrame to run resize logic AFTER the browser has updated the layout
+    // based on the display style changes above.
+    requestAnimationFrame(() => {
+        // console.log("Running resize check after search filter update...");
+        visiblePlotsToResize.forEach(plotInfo => {
+            // Double-check the wrapper is still considered visible by the layout engine
+            const wrapper = document.getElementById(`plot-wrapper-${plotInfo.metricName.replace(/[^a-zA-Z0-9]/g, '-')}`);
+            // offsetParent is null if display is none or element is not attached/rendered
+            if (wrapper && wrapper.offsetParent !== null) {
+                resizePlot(plotInfo);
+            }
+        });
+
+        // Update placeholder visibility *after* filtering and potential resizing
+        updatePlaceholderVisibility(anyPlotVisibleOverall);
+    });
+
+    // Note: updatePlaceholderVisibility is now called inside requestAnimationFrame
+    // to ensure it reflects the state *after* layout changes.
+}
+// --- Global Resize Handler ---
+let resizeDebounceTimer = null;
+function handleGlobalResize() {
+    clearTimeout(resizeDebounceTimer);
+    resizeDebounceTimer = setTimeout(() => {
+        console.log("Window resized, updating visible plots...");
+        isResizing = true; // Optional: Set flag if needed elsewhere
+
+        for (const metricName in activePlots) {
+            const plotInfo = activePlots[metricName];
+            const wrapper = document.getElementById(`plot-wrapper-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`);
+
+            // Resize plots whose wrappers exist and are currently rendered in the layout
+            if (plotInfo && wrapper && wrapper.offsetParent !== null) {
+                 resizePlot(plotInfo);
+            }
+        }
+        isResizing = false; // Optional: Clear flag
+    }, 150); // Debounce resize events to avoid excessive calls
 }
 
 /**
@@ -1561,51 +1726,6 @@ function updateDashboard() {
     animationFrameId = requestAnimationFrame(updateDashboard);
 }
 
-// --- Search/Filter Logic ---
-function handleMetricSearch() {
-    if (!metricSearchInput) return; // Safety check
-
-    const searchTerm = metricSearchInput.value.toLowerCase().trim();
-    const allMetricGroups = dashboardContainer.querySelectorAll('.metric-group');
-    let anyPlotVisibleOverall = false;
-
-    allMetricGroups.forEach(groupContainer => {
-        const groupPlotsContainer = groupContainer.querySelector('.metric-group-plots');
-        const plotWrappers = groupPlotsContainer ? groupPlotsContainer.querySelectorAll('.plot-wrapper') : [];
-        let groupHasVisiblePlots = false;
-        // const groupName = groupContainer.querySelector('.metric-group-header h3')?.textContent?.toLowerCase() || ''; // Optional: filter group name too
-
-        plotWrappers.forEach(wrapper => {
-            const metricName = wrapper.dataset.metricName?.toLowerCase(); // Get from dataset
-            let isMatch = false;
-            if (metricName) {
-                // Match if search term is empty OR metric name includes the term
-                isMatch = searchTerm === '' || metricName.includes(searchTerm);
-            } else {
-                // If somehow a wrapper has no metric name, hide it when searching
-                isMatch = searchTerm === '';
-            }
-
-            // Show/hide individual plot
-            wrapper.style.display = isMatch ? '' : 'none'; // Use '' for default display (grid item)
-
-            if (isMatch) {
-                groupHasVisiblePlots = true;
-                anyPlotVisibleOverall = true; // Track if ANY plot is visible across all groups
-            }
-        });
-
-        // Show/hide the entire group container
-        // Show the group if the search term is empty OR if the group itself has visible plots
-        const showGroup = searchTerm === '' || groupHasVisiblePlots;
-        groupContainer.style.display = showGroup ? '' : 'none';
-    });
-
-    // Update placeholder text based on selection and filtering results
-    updatePlaceholderVisibility(anyPlotVisibleOverall);
-}
-
-
 // Helper to centralize placeholder logic
 function updatePlaceholderVisibility(anyPlotVisible = true) { // Default to true if not checking filter results
     if (!placeholderText) return;
@@ -1654,6 +1774,8 @@ async function initialize() {
     setupBulkActions();   // Setup "Select All" / "Deselect All" buttons
     setupSearchFilter();   // <-- NEW: Setup search listener
     await fetchRuns();    // Fetch the list of available runs from the backend
+
+    window.addEventListener('resize', handleGlobalResize);
 
     // Start the main animation loop
     requestAnimationFrame(updateDashboard);

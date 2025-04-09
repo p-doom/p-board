@@ -616,6 +616,7 @@ body.resizing { /* Prevent text selection globally during resize */
 
 /* Plot Wrapper Grid Layout */
 .plot-wrapper {
+    aspect-ratio: 1 / 1;
     display: grid;
     grid-template-columns: var(--plot-yaxis-width) 1fr; /* Y-Axis | Plot */
     grid-template-rows: auto 1fr var(--plot-xaxis-height); /* Title | Plot | X-Axis */
