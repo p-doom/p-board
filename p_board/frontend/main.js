@@ -1543,18 +1543,26 @@ function updateDashboard() {
     for (const metricName in activePlots) {
         const plotInfo = activePlots[metricName];
         // Check if plotInfo and necessary components exist
-        if (plotInfo && plotInfo.wglp) {
-            // 1. Update the WebGL plot (redraws lines based on current scale/offset)
-            plotInfo.wglp.update();
+        if (plotInfo && plotInfo.wglp && plotInfo.canvas) { // Added check for plotInfo.canvas
 
-            // 2. Update the 2D Axes using the *latest* scale/offset from the WebGL plot
-            const { wglp, ctxX, ctxY, xAxisCanvas, yAxisCanvas } = plotInfo;
-            if (ctxX && xAxisCanvas && xAxisCanvas.width > 0 && xAxisCanvas.height > 0) {
-                drawAxisX(ctxX, xAxisCanvas.width, xAxisCanvas.height, wglp.gScaleX, wglp.gOffsetX, AXIS_DIVISIONS);
+            // Find the wrapper element for this plot
+            const wrapper = plotInfo.canvas.closest('.plot-wrapper');
+
+            // *** FIX: Only update plots that are currently visible ***
+            if (wrapper && window.getComputedStyle(wrapper).display !== 'none') {
+                // 1. Update the WebGL plot (redraws lines based on current scale/offset)
+                plotInfo.wglp.update();
+
+                // 2. Update the 2D Axes using the *latest* scale/offset from the WebGL plot
+                const { wglp, ctxX, ctxY, xAxisCanvas, yAxisCanvas } = plotInfo;
+                if (ctxX && xAxisCanvas && xAxisCanvas.width > 0 && xAxisCanvas.height > 0) {
+                    drawAxisX(ctxX, xAxisCanvas.width, xAxisCanvas.height, wglp.gScaleX, wglp.gOffsetX, AXIS_DIVISIONS);
+                }
+                if (ctxY && yAxisCanvas && yAxisCanvas.width > 0 && yAxisCanvas.height > 0) {
+                    drawAxisY(ctxY, yAxisCanvas.width, yAxisCanvas.height, wglp.gScaleY, wglp.gOffsetY, AXIS_DIVISIONS);
+                }
             }
-            if (ctxY && yAxisCanvas && yAxisCanvas.width > 0 && yAxisCanvas.height > 0) {
-                drawAxisY(ctxY, yAxisCanvas.width, yAxisCanvas.height, wglp.gScaleY, wglp.gOffsetY, AXIS_DIVISIONS);
-            }
+            // --- End of FIX ---
         }
     }
     // Request the next frame
