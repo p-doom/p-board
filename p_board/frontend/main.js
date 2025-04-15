@@ -14,22 +14,38 @@ const runBulkControls = document.getElementById('run-bulk-controls');
 const selectAllBtn = document.getElementById('select-all-runs');
 const deselectAllBtn = document.getElementById('deselect-all-runs');
 const plotTooltip = document.getElementById('plot-tooltip'); // Tooltip Element
-const metricSearchInput = document.getElementById('metric-search-input'); // <-- NEW
+const metricSearchInput = document.getElementById('metric-search-input');
 const hydraModal = document.getElementById('hydra-modal');
 const hydraModalRunName = document.getElementById('hydra-modal-run-name');
 const hydraModalContent = document.getElementById('hydra-modal-content');
 const hydraModalCloseBtn = hydraModal ? hydraModal.querySelector('.modal-close-btn') : null;
+const themeToggleBtn = document.getElementById('theme-toggle-btn'); // <-- NEW: Theme Toggle Button
+const themeIconSun = document.getElementById('theme-icon-sun');     // <-- NEW: Sun Icon
+const themeIconMoon = document.getElementById('theme-icon-moon');   // <-- NEW: Moon Icon
 
 // --- Configuration ---
-const API_BASE_URL = ''; // <-- NEW: Requests will go to the same origin
+const API_BASE_URL = '';
 const AXIS_DIVISIONS = 7; // Number of ticks/labels on axes
-const AXIS_TEXT_STYLE = {
-    font: getComputedStyle(document.documentElement).getPropertyValue('--axis-font') || '11px sans-serif', // Reflect potential CSS change
-    fillStyle: getComputedStyle(document.documentElement).getPropertyValue('--axis-text-color') || '#b0b5bb', // Reflect potential CSS change
-    strokeStyle: getComputedStyle(document.documentElement).getPropertyValue('--axis-text-color') || '#b0b5bb', // Match fill for ticks
-    tickSize: 6, // Slightly larger ticks
-};
 const TOOLTIP_CLOSENESS_THRESHOLD_PX_SQ = 15 * 15; // Squared pixel distance threshold for tooltip activation
+const THEME_STORAGE_KEY = 'p-board-theme'; // <-- NEW: LocalStorage key
+
+// --- Dynamic Axis Styling ---
+let AXIS_TEXT_STYLE = {}; // Initialize empty
+
+/** // <-- NEW: Function to update axis style based on current theme
+ * Updates the global AXIS_TEXT_STYLE object based on computed CSS variables.
+ */
+function updateAxisTextStyle() {
+    const computedStyle = getComputedStyle(document.documentElement);
+    AXIS_TEXT_STYLE = {
+        font: computedStyle.getPropertyValue('--axis-font').trim() || '11px sans-serif',
+        fillStyle: computedStyle.getPropertyValue('--axis-text-color').trim() || '#b0b5bb',
+        strokeStyle: computedStyle.getPropertyValue('--axis-text-color').trim() || '#b0b5bb', // Match fill for ticks
+        tickSize: 6,
+    };
+    // console.log("Updated Axis Style:", AXIS_TEXT_STYLE); // For debugging
+}
+
 /**
  * Resizes the main canvas, WebGL viewport, and axis canvases for a given plot.
  * @param {object} plotInfo The plot info object.
@@ -48,6 +64,7 @@ function resizePlot(plotInfo) {
     const mainClientHeight = canvas.clientHeight;
 
     if (mainClientWidth <= 0 || mainClientHeight <= 0) {
+        // Don't resize if not visible or has no dimensions
         return;
     }
 
@@ -59,6 +76,7 @@ function resizePlot(plotInfo) {
         canvas.height = newHeight;
         wglp.viewport(0, 0, newWidth, newHeight);
         resized = true;
+        // console.log(`Resized main canvas for ${metricName} to ${newWidth}x${newHeight}`);
     }
 
     const axesResized = sizeAxisCanvases(plotInfo); // This function now updates plotInfo.ctxX/Y
@@ -81,6 +99,13 @@ function initAxisCanvas(canvas) {
         const minWidth = 1 * devicePixelRatio;
         const minHeight = 1 * devicePixelRatio;
 
+        // Ensure client dimensions are positive before calculating new size
+        if (clientWidth <= 0 || clientHeight <= 0) {
+            // console.warn(`Axis canvas ${canvas.id} has zero client dimensions. Skipping resize.`);
+            // Return existing context if available, otherwise null
+            return { ctx: canvas.getContext('2d'), resized: false };
+        }
+
         let newWidth = Math.max(minWidth, Math.round(clientWidth * devicePixelRatio));
         let newHeight = Math.max(minHeight, Math.round(clientHeight * devicePixelRatio));
 
@@ -88,10 +113,12 @@ function initAxisCanvas(canvas) {
             canvas.width = newWidth;
             canvas.height = newHeight;
             resized = true;
+            // console.log(`Resized axis canvas ${canvas.id} to ${newWidth}x${newHeight}`);
         }
 
         const ctx = canvas.getContext('2d');
         if (ctx) {
+            // Apply styles from the global object (which is updated on theme change)
             ctx.font = AXIS_TEXT_STYLE.font;
             ctx.fillStyle = AXIS_TEXT_STYLE.fillStyle;
             ctx.strokeStyle = AXIS_TEXT_STYLE.strokeStyle;
@@ -155,7 +182,10 @@ function handleMetricSearch() {
             if (isMatch && metricName && activePlots[metricName]) {
                 groupHasVisiblePlots = true;
                 anyPlotVisibleOverall = true;
-                visiblePlotsToResize.push(activePlots[metricName]);
+                // Only add if the wrapper is actually visible in the DOM
+                if (wrapper.offsetParent !== null) {
+                    visiblePlotsToResize.push(activePlots[metricName]);
+                }
             }
         });
 
@@ -165,10 +195,12 @@ function handleMetricSearch() {
          }
     });
 
+    // Use requestAnimationFrame to ensure layout is updated before resizing
     requestAnimationFrame(() => {
         visiblePlotsToResize.forEach(plotInfo => {
+            // Double-check visibility before resizing
             const wrapper = document.getElementById(`plot-wrapper-${plotInfo.metricName.replace(/[^a-zA-Z0-9]/g, '-')}`);
-            if (wrapper && wrapper.offsetParent !== null) { // Check if rendered
+            if (wrapper && wrapper.offsetParent !== null) { // Check if rendered and visible
                 resizePlot(plotInfo);
             }
         });
@@ -181,16 +213,18 @@ function handleGlobalResize() {
     clearTimeout(resizeDebounceTimer);
     resizeDebounceTimer = setTimeout(() => {
         console.log("Window resized, updating visible plots...");
-        isResizing = true;
+        isResizing = true; // Set flag
         for (const metricName in activePlots) {
             const plotInfo = activePlots[metricName];
             const wrapper = document.getElementById(`plot-wrapper-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`);
+            // Check if plot exists and its wrapper is visible in the DOM
             if (plotInfo && wrapper && wrapper.offsetParent !== null) {
                  resizePlot(plotInfo);
             }
         }
-        isResizing = false;
-    }, 150);
+        isResizing = false; // Clear flag
+        // No need to call updateDashboard explicitly, animation frame handles drawing
+    }, 150); // Debounce resize events
 }
 
 /**
@@ -567,7 +601,7 @@ function setupModalCloseHandlers() {
 }
 
 // --- Plotting Update & Grouping (Keep as before) ---
-function updatePlots(metricsData) { // metricsData contains only SCALAR data
+function updatePlots(metricsData) {
     // console.log("Updating plots with scalar data...");
     const currentMetricNames = Object.keys(metricsData);
     const existingMetricNames = Object.keys(activePlots);
@@ -712,7 +746,10 @@ function createOrUpdatePlot(metricName, plotDataForMetric, parentElement) {
               xAxisCanvas = wrapper.querySelector('.plot-xaxis');
               if (!yAxisCanvas || !canvas || !xAxisCanvas) {
                  console.error(`Plot wrapper ${plotContainerId} structure missing. Rebuilding.`);
-                 wrapper.innerHTML = '';
+                 wrapper.innerHTML = ''; // Clear if structure is bad
+                 // Force full rebuild below
+              } else {
+                  // Structure seems okay, just need to init state
               }
          } else {
              wrapper = document.createElement('div');
@@ -720,8 +757,10 @@ function createOrUpdatePlot(metricName, plotDataForMetric, parentElement) {
              wrapper.id = plotContainerId;
              wrapper.dataset.metricName = metricName;
              parentElement.appendChild(wrapper);
+             // Force full rebuild below
          }
 
+         // Rebuild inner structure if needed (new wrapper or bad structure)
          if (needsInitialization || wrapper.children.length < 5) {
               wrapper.innerHTML = ''; // Clear previous content if rebuilding
               const title = document.createElement('h3'); title.textContent = metricName; title.title = metricName; wrapper.appendChild(title);
@@ -730,6 +769,7 @@ function createOrUpdatePlot(metricName, plotDataForMetric, parentElement) {
               const cornerDiv = document.createElement('div'); cornerDiv.className = 'plot-corner'; wrapper.appendChild(cornerDiv);
               const xAxisContainer = document.createElement('div'); xAxisContainer.className = 'plot-xaxis-container'; xAxisCanvas = document.createElement('canvas'); xAxisCanvas.className = 'plot-xaxis'; xAxisCanvas.id = `plot-xaxis-${safeMetricName}`; xAxisContainer.appendChild(xAxisCanvas); wrapper.appendChild(xAxisContainer);
          } else {
+              // Elements already exist from previous check
               yAxisCanvas = wrapper.querySelector('.plot-yaxis');
               canvas = wrapper.querySelector('.plot-canvas');
               xAxisCanvas = wrapper.querySelector('.plot-xaxis');
@@ -744,8 +784,9 @@ function createOrUpdatePlot(metricName, plotDataForMetric, parentElement) {
          wglp = new WebglPlot(canvas);
          zoomRectLine = new WebglLine(new ColorRGBA(0.9, 0.9, 0.9, 0.7), 4); zoomRectLine.loop = true; zoomRectLine.xy = new Float32Array(8).fill(0); zoomRectLine.visible = false; wglp.addLine(zoomRectLine);
 
-         const { ctx: ctxX } = initAxisCanvas(xAxisCanvas); // Get context directly
-         const { ctx: ctxY } = initAxisCanvas(yAxisCanvas); // Get context directly
+         // Initialize axis contexts *after* elements are created/found
+         const { ctx: ctxX } = initAxisCanvas(xAxisCanvas);
+         const { ctx: ctxY } = initAxisCanvas(yAxisCanvas);
 
          plotInfo = {
              wglp, zoomRectLine, lines: {}, isInitialLoad: true, canvas, yAxisCanvas, xAxisCanvas, ctxX, ctxY, // Store contexts directly
@@ -768,6 +809,9 @@ function createOrUpdatePlot(metricName, plotDataForMetric, parentElement) {
              createOrUpdatePlot(metricName, plotDataForMetric, parentElement); return;
          }
          if (!plotInfo.metricName) plotInfo.metricName = metricName;
+         // Ensure axis contexts are valid (might be lost)
+         if (!plotInfo.ctxX) plotInfo.ctxX = initAxisCanvas(xAxisCanvas).ctx;
+         if (!plotInfo.ctxY) plotInfo.ctxY = initAxisCanvas(yAxisCanvas).ctx;
      }
 
      plotInfo.minStep = overallMinStep; plotInfo.maxStep = overallMaxStep; plotInfo.minY = overallMinY; plotInfo.maxY = overallMaxY;
@@ -848,8 +892,9 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
      const screenToPlotCoords = (screenX, screenY) => {
          const mainCanvasRect = getMainCanvasRect(); if (!mainCanvasRect || mainCanvasRect.width <= 0 || mainCanvasRect.height <= 0) return { x: NaN, y: NaN };
          const offsetX = screenX - mainCanvasRect.left; const offsetY = screenY - mainCanvasRect.top;
-         const ndcX_corrected = (2 * (offsetX * devicePixelRatio) - canvas.width) / canvas.width;
-         const ndcY_corrected = (canvas.height - 2 * (offsetY * devicePixelRatio)) / canvas.height;
+         // Correct calculation using canvas dimensions
+         const ndcX_corrected = (2 * (offsetX * devicePixelRatio) / canvas.width) - 1;
+         const ndcY_corrected = 1 - (2 * (offsetY * devicePixelRatio) / canvas.height);
          return ndcToPlotCoords(ndcX_corrected, ndcY_corrected);
      };
 
@@ -863,7 +908,8 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
          e.preventDefault(); canvas.focus(); tooltipElement.style.display = 'none';
          const mainCanvasRect = getMainCanvasRect(); if (!mainCanvasRect) return;
          const offsetX = e.clientX - mainCanvasRect.left; const offsetY = e.clientY - mainCanvasRect.top;
-         const currentNdcX = (2 * (offsetX * devicePixelRatio) - canvas.width) / canvas.width; const currentNdcY = (canvas.height - 2 * (offsetY * devicePixelRatio)) / canvas.height;
+         const currentNdcX = (2 * (offsetX * devicePixelRatio) / canvas.width) - 1;
+         const currentNdcY = 1 - (2 * (offsetY * devicePixelRatio) / canvas.height);
          if (e.button === 0) { // Left Click: Zoom Rect
              isZoomingRect = true; isDragging = false; zoomRectStartXNDC = currentNdcX; zoomRectStartYNDC = currentNdcY;
              try { const startPlotCoords = ndcToPlotCoords(zoomRectStartXNDC, zoomRectStartYNDC); if (!isFinite(startPlotCoords.x) || !isFinite(startPlotCoords.y)) throw new Error("Invalid start coords"); zoomRectLine.xy = new Float32Array([ startPlotCoords.x, startPlotCoords.y, startPlotCoords.x, startPlotCoords.y, startPlotCoords.x, startPlotCoords.y, startPlotCoords.x, startPlotCoords.y, ]); zoomRectLine.visible = true; canvas.style.cursor = 'crosshair'; }
@@ -877,7 +923,8 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
               tooltipElement.style.display = 'none'; e.preventDefault();
               const mainCanvasRect = getMainCanvasRect(); if (!mainCanvasRect) return;
               const offsetX = e.clientX - mainCanvasRect.left; const offsetY = e.clientY - mainCanvasRect.top;
-              const currentNdcX = (2 * (offsetX * devicePixelRatio) - canvas.width) / canvas.width; const currentNdcY = (canvas.height - 2 * (offsetY * devicePixelRatio)) / canvas.height;
+              const currentNdcX = (2 * (offsetX * devicePixelRatio) / canvas.width) - 1;
+              const currentNdcY = 1 - (2 * (offsetY * devicePixelRatio) / canvas.height);
               if (isDragging) {
                   const dxScreen = (e.clientX - dragStartX) * devicePixelRatio; const dyScreen = (e.clientY - dragStartY) * devicePixelRatio;
                   const deltaOffsetX = (canvas.width > 0) ? (dxScreen / canvas.width) * 2 : 0; const deltaOffsetY = (canvas.height > 0) ? (-dyScreen / canvas.height) * 2 : 0;
@@ -907,7 +954,8 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
           }
           if (closestPointInfo) {
                const formattedValue = formatAxisValue(closestPointInfo.value, plotInfo.maxY - plotInfo.minY); const formattedStep = Number.isInteger(closestPointInfo.step) ? closestPointInfo.step.toString() : formatAxisValue(closestPointInfo.step, plotInfo.maxStep - plotInfo.minStep);
-               tooltipElement.innerHTML = `<span style="display: inline-block; width: 10px; height: 10px; background-color: ${closestPointInfo.color}; margin-right: 5px; vertical-align: middle; border: 1px solid rgba(255,255,255,0.3); border-radius: 2px;"></span><strong style="color: #eee;">${closestPointInfo.runName}</strong><br><span style="font-size: 0.9em; color: var(--text-secondary);">Step:</span> ${formattedStep}<br><span style="font-size: 0.9em; color: var(--text-secondary);">Value:</span> ${formattedValue}`;
+               // Use CSS variables for tooltip text colors
+               tooltipElement.innerHTML = `<span style="display: inline-block; width: 10px; height: 10px; background-color: ${closestPointInfo.color}; margin-right: 5px; vertical-align: middle; border: 1px solid rgba(128,128,128,0.3); border-radius: 2px;"></span><strong style="color: var(--text-primary);">${closestPointInfo.runName}</strong><br><span style="font-size: 0.9em; color: var(--text-secondary);">Step:</span> ${formattedStep}<br><span style="font-size: 0.9em; color: var(--text-secondary);">Value:</span> ${formattedValue}`;
                let tooltipX = cursorScreenX + 15; let tooltipY = cursorScreenY + 10; const tooltipRect = tooltipElement.getBoundingClientRect(); const viewportWidth = window.innerWidth; const viewportHeight = window.innerHeight;
                if (tooltipX + tooltipRect.width > viewportWidth - 10) { tooltipX = cursorScreenX - tooltipRect.width - 15; } if (tooltipY + tooltipRect.height > viewportHeight - 10) { tooltipY = cursorScreenY - tooltipRect.height - 10; }
                if (tooltipX < 10) tooltipX = 10; if (tooltipY < 10) tooltipY = 10;
@@ -916,7 +964,9 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
      }); // End mousemove
      canvas.addEventListener('mouseup', (e) => {
           if (!isDragging && !isZoomingRect) return; e.preventDefault(); const mainCanvasRect = getMainCanvasRect(); if (!mainCanvasRect) return;
-          const offsetX = e.clientX - mainCanvasRect.left; const offsetY = e.clientY - mainCanvasRect.top; const endNdcX = (2 * (offsetX * devicePixelRatio) - canvas.width) / canvas.width; const endNdcY = (canvas.height - 2 * (offsetY * devicePixelRatio)) / canvas.height;
+          const offsetX = e.clientX - mainCanvasRect.left; const offsetY = e.clientY - mainCanvasRect.top;
+          const endNdcX = (2 * (offsetX * devicePixelRatio) / canvas.width) - 1;
+          const endNdcY = 1 - (2 * (offsetY * devicePixelRatio) / canvas.height);
           if (isDragging) { isDragging = false; canvas.style.cursor = 'grab'; }
           else if (isZoomingRect) {
               isZoomingRect = false; zoomRectLine.visible = false; canvas.style.cursor = 'grab';
@@ -931,27 +981,52 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
      canvas.addEventListener('mouseleave', (e) => { if (isDragging) { isDragging = false; canvas.style.cursor = 'grab'; } if (isZoomingRect) { isZoomingRect = false; zoomRectLine.visible = false; canvas.style.cursor = 'grab'; } tooltipElement.style.display = 'none'; }); // End mouseleave
      canvas.addEventListener('wheel', (e) => {
         if (e.shiftKey) {
-            e.preventDefault(); tooltipElement.style.display = 'none'; const zoomFactor = 1.1; const scaleDelta = e.deltaY < 0 ? zoomFactor : 1 / zoomFactor; const mainCanvasRect = getMainCanvasRect(); if (!mainCanvasRect) return; const offsetX = e.clientX - mainCanvasRect.left; const offsetY = e.clientY - mainCanvasRect.top; const cursorNDC_X = (2 * (offsetX * devicePixelRatio) - canvas.width) / canvas.width; const cursorNDC_Y = (canvas.height - 2 * (offsetY * devicePixelRatio)) / canvas.height; const gScaleXOld = wglp.gScaleX; const gScaleYOld = wglp.gScaleY; let newScaleX = gScaleXOld * scaleDelta; let newScaleY = gScaleYOld * scaleDelta; newScaleX = Math.max(1e-7, Math.min(1e7, newScaleX)); newScaleY = Math.max(1e-7, Math.min(1e7, newScaleY)); const actualScaleChangeX = (Math.abs(gScaleXOld) > 1e-9) ? newScaleX / gScaleXOld : 1; const actualScaleChangeY = (Math.abs(gScaleYOld) > 1e-9) ? newScaleY / gScaleYOld : 1; wglp.gOffsetX = cursorNDC_X + (wglp.gOffsetX - cursorNDC_X) * actualScaleChangeX; wglp.gOffsetY = cursorNDC_Y + (wglp.gOffsetY - cursorNDC_Y) * actualScaleChangeY; wglp.gScaleX = newScaleX; wglp.gScaleY = newScaleY;
+            e.preventDefault(); tooltipElement.style.display = 'none'; const zoomFactor = 1.1; const scaleDelta = e.deltaY < 0 ? zoomFactor : 1 / zoomFactor; const mainCanvasRect = getMainCanvasRect(); if (!mainCanvasRect) return; const offsetX = e.clientX - mainCanvasRect.left; const offsetY = e.clientY - mainCanvasRect.top;
+            const cursorNDC_X = (2 * (offsetX * devicePixelRatio) / canvas.width) - 1;
+            const cursorNDC_Y = 1 - (2 * (offsetY * devicePixelRatio) / canvas.height);
+            const gScaleXOld = wglp.gScaleX; const gScaleYOld = wglp.gScaleY; let newScaleX = gScaleXOld * scaleDelta; let newScaleY = gScaleYOld * scaleDelta; newScaleX = Math.max(1e-7, Math.min(1e7, newScaleX)); newScaleY = Math.max(1e-7, Math.min(1e7, newScaleY)); const actualScaleChangeX = (Math.abs(gScaleXOld) > 1e-9) ? newScaleX / gScaleXOld : 1; const actualScaleChangeY = (Math.abs(gScaleYOld) > 1e-9) ? newScaleY / gScaleYOld : 1; wglp.gOffsetX = cursorNDC_X + (wglp.gOffsetX - cursorNDC_X) * actualScaleChangeX; wglp.gOffsetY = cursorNDC_Y + (wglp.gOffsetY - cursorNDC_Y) * actualScaleChangeY; wglp.gScaleX = newScaleX; wglp.gScaleY = newScaleY;
         }
      }, { passive: false });
      // --- Touch Interactions (Keep as before) ---
      let isPinching = false; let isTouchPanning = false; let touchStartX0 = 0, touchStartY0 = 0; let initialPinchDistance = 0; let touchPlotOffsetXOld = 0, touchPlotOffsetYOld = 0; let initialPinchCenterX = 0, initialPinchCenterY = 0;
      canvas.addEventListener('touchstart', (e) => { e.preventDefault(); zoomRectLine.visible = false; tooltipElement.style.display = 'none'; if (e.touches.length === 1) { isTouchPanning = true; isPinching = false; const touch = e.touches[0]; touchStartX0 = touch.clientX; touchStartY0 = touch.clientY; touchPlotOffsetXOld = wglp.gOffsetX; touchPlotOffsetYOld = wglp.gOffsetY; } else if (e.touches.length === 2) { isPinching = true; isTouchPanning = false; const t0 = e.touches[0]; const t1 = e.touches[1]; initialPinchCenterX = (t0.clientX + t1.clientX) / 2; initialPinchCenterY = (t0.clientY + t1.clientY) / 2; initialPinchDistance = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY); touchPlotOffsetXOld = wglp.gOffsetX; touchPlotOffsetYOld = wglp.gOffsetY; } else { isTouchPanning = false; isPinching = false; } }, { passive: false });
-     canvas.addEventListener('touchmove', (e) => { e.preventDefault(); tooltipElement.style.display = 'none'; const mainCanvasRect = getMainCanvasRect(); if (!mainCanvasRect) return; if (isTouchPanning && e.touches.length === 1) { const touch = e.touches[0]; const dxScreen = (touch.clientX - touchStartX0) * devicePixelRatio; const dyScreen = (touch.clientY - touchStartY0) * devicePixelRatio; const deltaOffsetX = (canvas.width > 0) ? (dxScreen / canvas.width) * 2 : 0; const deltaOffsetY = (canvas.height > 0) ? (-dyScreen / canvas.height) * 2 : 0; wglp.gOffsetX = touchPlotOffsetXOld + deltaOffsetX; wglp.gOffsetY = touchPlotOffsetYOld + deltaOffsetY; } else if (isPinching && e.touches.length === 2) { const t0 = e.touches[0]; const t1 = e.touches[1]; const currentDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY); const currentCenterX = (t0.clientX + t1.clientX) / 2; const currentCenterY = (t0.clientY + t1.clientY) / 2; const scaleDelta = (initialPinchDistance > 1e-6) ? currentDist / initialPinchDistance : 1; const centerOffsetX = currentCenterX - mainCanvasRect.left; const centerOffsetY = currentCenterY - mainCanvasRect.top; const centerNDC_X = (2 * (centerOffsetX * devicePixelRatio) - canvas.width) / canvas.width; const centerNDC_Y = (canvas.height - 2 * (centerOffsetY * devicePixelRatio)) / canvas.height; const gScaleXOld = wglp.gScaleX; const gScaleYOld = wglp.gScaleY; let newScaleX = gScaleXOld * scaleDelta; let newScaleY = gScaleYOld * scaleDelta; newScaleX = Math.max(1e-7, Math.min(1e7, newScaleX)); newScaleY = Math.max(1e-7, Math.min(1e7, newScaleY)); const actualScaleChangeX = (Math.abs(gScaleXOld) > 1e-9) ? newScaleX / gScaleXOld : 1; const actualScaleChangeY = (Math.abs(gScaleYOld) > 1e-9) ? newScaleY / gScaleYOld : 1; wglp.gOffsetX = centerNDC_X + (touchPlotOffsetXOld - centerNDC_X) * actualScaleChangeX; wglp.gOffsetY = centerNDC_Y + (touchPlotOffsetYOld - centerNDC_Y) * actualScaleChangeY; wglp.gScaleX = newScaleX; wglp.gScaleY = newScaleY; initialPinchDistance = currentDist; touchPlotOffsetXOld = wglp.gOffsetX; touchPlotOffsetYOld = wglp.gOffsetY; } }, { passive: false });
+     canvas.addEventListener('touchmove', (e) => { e.preventDefault(); tooltipElement.style.display = 'none'; const mainCanvasRect = getMainCanvasRect(); if (!mainCanvasRect) return; if (isTouchPanning && e.touches.length === 1) { const touch = e.touches[0]; const dxScreen = (touch.clientX - touchStartX0) * devicePixelRatio; const dyScreen = (touch.clientY - touchStartY0) * devicePixelRatio; const deltaOffsetX = (canvas.width > 0) ? (dxScreen / canvas.width) * 2 : 0; const deltaOffsetY = (canvas.height > 0) ? (-dyScreen / canvas.height) * 2 : 0; wglp.gOffsetX = touchPlotOffsetXOld + deltaOffsetX; wglp.gOffsetY = touchPlotOffsetYOld + deltaOffsetY; } else if (isPinching && e.touches.length === 2) { const t0 = e.touches[0]; const t1 = e.touches[1]; const currentDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY); const currentCenterX = (t0.clientX + t1.clientX) / 2; const currentCenterY = (t0.clientY + t1.clientY) / 2; const scaleDelta = (initialPinchDistance > 1e-6) ? currentDist / initialPinchDistance : 1; const centerOffsetX = currentCenterX - mainCanvasRect.left; const centerOffsetY = currentCenterY - mainCanvasRect.top;
+     const centerNDC_X = (2 * (centerOffsetX * devicePixelRatio) / canvas.width) - 1;
+     const centerNDC_Y = 1 - (2 * (centerOffsetY * devicePixelRatio) / canvas.height);
+     const gScaleXOld = wglp.gScaleX; const gScaleYOld = wglp.gScaleY; let newScaleX = gScaleXOld * scaleDelta; let newScaleY = gScaleYOld * scaleDelta; newScaleX = Math.max(1e-7, Math.min(1e7, newScaleX)); newScaleY = Math.max(1e-7, Math.min(1e7, newScaleY)); const actualScaleChangeX = (Math.abs(gScaleXOld) > 1e-9) ? newScaleX / gScaleXOld : 1; const actualScaleChangeY = (Math.abs(gScaleYOld) > 1e-9) ? newScaleY / gScaleYOld : 1; wglp.gOffsetX = centerNDC_X + (touchPlotOffsetXOld - centerNDC_X) * actualScaleChangeX; wglp.gOffsetY = centerNDC_Y + (touchPlotOffsetYOld - centerNDC_Y) * actualScaleChangeY; wglp.gScaleX = newScaleX; wglp.gScaleY = newScaleY; initialPinchDistance = currentDist; touchPlotOffsetXOld = wglp.gOffsetX; touchPlotOffsetYOld = wglp.gOffsetY; } }, { passive: false });
      canvas.addEventListener('touchend', (e) => { e.preventDefault(); if (e.touches.length < 2) { isPinching = false; } if (e.touches.length < 1) { isTouchPanning = false; } }, { passive: false });
 } // End setupInteractions
 
-// --- Global Animation & Resize (Keep as before) ---
+// --- Global Animation & Resize --- // <-- MODIFIED
 let animationFrameId = null;
 function updateDashboard() {
-    for (const metricName in activePlots) {
-        const plotInfo = activePlots[metricName];
-        if (plotInfo && plotInfo.wglp) {
-            plotInfo.wglp.update(); // Update WebGL plot
-            const { wglp, ctxX, ctxY, xAxisCanvas, yAxisCanvas } = plotInfo;
-            // Update 2D Axes only if context and canvas are valid
-            if (ctxX && xAxisCanvas && xAxisCanvas.width > 0 && xAxisCanvas.height > 0) { drawAxisX(ctxX, xAxisCanvas.width, xAxisCanvas.height, wglp.gScaleX, wglp.gOffsetX, AXIS_DIVISIONS); }
-            if (ctxY && yAxisCanvas && yAxisCanvas.width > 0 && yAxisCanvas.height > 0) { drawAxisY(ctxY, yAxisCanvas.width, yAxisCanvas.height, wglp.gScaleY, wglp.gOffsetY, AXIS_DIVISIONS); }
+    // Only redraw if not currently resizing via JS
+    if (!isResizing) {
+        for (const metricName in activePlots) {
+            const plotInfo = activePlots[metricName];
+            // Check if plot exists and its wrapper is visible
+            const wrapper = document.getElementById(`plot-wrapper-${metricName.replace(/[^a-zA-Z0-9]/g, '-')}`);
+            if (plotInfo && plotInfo.wglp && wrapper && wrapper.offsetParent !== null) {
+                plotInfo.wglp.update(); // Update WebGL plot
+
+                const { wglp, ctxX, ctxY, xAxisCanvas, yAxisCanvas } = plotInfo;
+
+                // Update 2D Axes only if context and canvas are valid and have dimensions
+                if (ctxX && xAxisCanvas && xAxisCanvas.width > 0 && xAxisCanvas.height > 0) {
+                    // Re-apply styles before drawing, in case theme changed
+                    ctxX.font = AXIS_TEXT_STYLE.font;
+                    ctxX.fillStyle = AXIS_TEXT_STYLE.fillStyle;
+                    ctxX.strokeStyle = AXIS_TEXT_STYLE.strokeStyle;
+                    drawAxisX(ctxX, xAxisCanvas.width, xAxisCanvas.height, wglp.gScaleX, wglp.gOffsetX, AXIS_DIVISIONS);
+                }
+                if (ctxY && yAxisCanvas && yAxisCanvas.width > 0 && yAxisCanvas.height > 0) {
+                    // Re-apply styles before drawing
+                    ctxY.font = AXIS_TEXT_STYLE.font;
+                    ctxY.fillStyle = AXIS_TEXT_STYLE.fillStyle;
+                    ctxY.strokeStyle = AXIS_TEXT_STYLE.strokeStyle;
+                    drawAxisY(ctxY, yAxisCanvas.width, yAxisCanvas.height, wglp.gScaleY, wglp.gOffsetY, AXIS_DIVISIONS);
+                }
+            }
         }
     }
     animationFrameId = requestAnimationFrame(updateDashboard);
@@ -963,10 +1038,28 @@ function updatePlaceholderVisibility(anyPlotVisible = true) {
     const noRunsSelected = selectedRuns.length === 0;
     const searchTerm = metricSearchInput ? metricSearchInput.value.trim() : '';
     const isFiltering = searchTerm !== '';
-    if (noRunsSelected) { placeholderText.textContent = "Select runs from the sidebar to view plots."; placeholderText.style.display = 'block'; }
-    else if (isFiltering && !anyPlotVisible) { placeholderText.textContent = `No metrics found matching "${searchTerm}".`; placeholderText.style.display = 'block'; }
-    else if (!isFiltering && !anyPlotVisible && !noRunsSelected) { placeholderText.textContent = "No plot data available for the selected runs."; placeholderText.style.display = 'block'; }
-    else { placeholderText.style.display = 'none'; }
+    let hasVisiblePlots = false;
+    if (!noRunsSelected) {
+        // Check if any plot wrappers are actually displayed
+        const visibleWrappers = dashboardContainer.querySelectorAll('.plot-wrapper:not([style*="display: none"])');
+        hasVisiblePlots = visibleWrappers.length > 0;
+    }
+
+    if (noRunsSelected) {
+        placeholderText.textContent = "Select runs from the sidebar to view plots.";
+        placeholderText.style.display = 'block';
+    } else if (isFiltering && !hasVisiblePlots) {
+        placeholderText.textContent = `No metrics found matching "${searchTerm}".`;
+        placeholderText.style.display = 'block';
+    } else if (!isFiltering && !hasVisiblePlots && !noRunsSelected) {
+        // This case needs refinement - could be no data OR all groups collapsed
+        // Let's assume for now it means no data if not filtering
+        placeholderText.textContent = "No plot data available for the selected runs, or all groups are collapsed.";
+        placeholderText.style.display = 'block';
+    }
+    else {
+        placeholderText.style.display = 'none';
+    }
 }
 
 // --- Search Setup (Keep as before) ---
@@ -976,18 +1069,84 @@ function setupSearchFilter() {
     // console.log("Metric search filter initialized.");
 }
 
+// --- Theme Toggling --- //
 
-// --- Initialization ---
+/**
+ * Sets the theme based on the provided value ('light' or 'dark').
+ * Updates the data-theme attribute, button icon, and saves preference.
+ * @param {string} theme - The desired theme ('light' or 'dark').
+ */
+function setTheme(theme) {
+    const isLight = theme === 'light';
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem(THEME_STORAGE_KEY, theme);
+
+    if (themeIconSun && themeIconMoon) {
+        themeIconSun.style.display = isLight ? 'none' : 'inline';
+        themeIconMoon.style.display = isLight ? 'inline' : 'none';
+    }
+    if (themeToggleBtn) {
+        themeToggleBtn.setAttribute('aria-label', `Switch to ${isLight ? 'Dark' : 'Light'} Theme`);
+        themeToggleBtn.setAttribute('title', `Switch to ${isLight ? 'Dark' : 'Light'} Theme`);
+    }
+
+    // Update axis styles immediately after setting theme attribute
+    updateAxisTextStyle();
+
+    // Trigger a resize/redraw of axes for existing plots
+    // We can force a resize which implicitly redraws axes in the next frame
+    handleGlobalResize(); // Use the existing debounced resize handler
+
+    console.log(`Theme set to: ${theme}`);
+}
+
+/**
+ * Handles clicks on the theme toggle button.
+ */
+function handleThemeToggle() {
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    const newTheme = currentTheme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+}
+
+/**
+ * Loads the preferred theme from localStorage or system preference.
+ */
+function loadInitialTheme() {
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+    const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const initialTheme = savedTheme || (prefersDark ? 'dark' : 'light');
+    setTheme(initialTheme); // Apply the theme
+
+    // Add listener for system theme changes
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+        // Only change if no theme is explicitly saved by the user
+        if (!localStorage.getItem(THEME_STORAGE_KEY)) {
+            setTheme(event.matches ? 'dark' : 'light');
+        }
+    });
+}
+
+// --- Initialization --- //
 async function initialize() {
     if (!plotTooltip) { console.error("FATAL: Tooltip element #plot-tooltip not found!"); displayError("Initialization failed: Tooltip element missing."); return; }
     if (!hydraModal) { console.warn("Hydra modal element #hydra-modal not found. Override viewing disabled."); /* Continue without modal */ }
+    if (!themeToggleBtn || !themeIconSun || !themeIconMoon) { console.warn("Theme toggle elements not found. Theme switching disabled."); }
 
     console.log("Initializing p-board...");
+
+    loadInitialTheme();
+    updateAxisTextStyle();
+
     setupBulkActions();
     setupSearchFilter();
-    if (hydraModal) { // Only setup close handlers if modal exists
+    if (hydraModal) {
         setupModalCloseHandlers();
     }
+    if (themeToggleBtn) {
+        themeToggleBtn.addEventListener('click', handleThemeToggle);
+    }
+
     await fetchRuns(); // Fetch runs (includes override status)
 
     window.addEventListener('resize', handleGlobalResize);

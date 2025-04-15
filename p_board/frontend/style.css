@@ -1,18 +1,18 @@
 /* style.css - Overhauled for Sleek Dev Tool Look */
 
 :root {
-    /* Color Palette (Inspired by modern dark themes) */
-    --bg-deep-dark: #101214;    /* Deepest background */
-    --bg-dark: #181a1e;        /* Main content background */
-    --bg-medium: #202327;      /* Sidebar, Card backgrounds */
-    --bg-light: #2c3138;       /* Hover states, subtle elements */
-    --border-color: #353a41;     /* Borders */
-    --text-primary: #d1d1d1;   /* Primary text */
-    --text-secondary: #9fa6b0; /* Slightly softer secondary */
-    --text-placeholder: #7a8087; /* Placeholder text */
-    --accent-primary: #4a90e2; /* Primary accent (softer blue) */
-    --accent-secondary: #6cb0f2; /* Lighter accent / hover */
-    --accent-primary-rgb: 74, 144, 226; /* RGB for accent */
+    /* --- Dark Theme (Default) --- */
+    --bg-deep-dark: #101214;
+    --bg-dark: #181a1e;
+    --bg-medium: #202327;
+    --bg-light: #2c3138;
+    --border-color: #353a41;
+    --text-primary: #d1d1d1;
+    --text-secondary: #9fa6b0;
+    --text-placeholder: #7a8087;
+    --accent-primary: #4a90e2;
+    --accent-secondary: #6cb0f2;
+    --accent-primary-rgb: 74, 144, 226;
     --error-color: #e55353;
     --error-bg: rgba(229, 83, 83, 0.1);
     --success-color: #52c41a;
@@ -34,7 +34,7 @@
 
     /* Borders & Shadows */
     --border-radius: 5px; /* Slightly smaller radius */
-    --box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0,0,0,0.15); /* Softer shadow */
+    /* --box-shadow defined per theme */
     --focus-ring-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.3);
 
     /* Layout */
@@ -49,9 +49,140 @@
 
     --plot-yaxis-width: 60px; /* Slightly narrower */
     --plot-xaxis-height: 30px;/* Slightly shorter */
-    --axis-border-color: var(--border-color); /* Use standard border */
+/* --axis-border-color defined per theme */
+/* --axis-text-color defined per theme */
+--axis-font: 11px var(--font-family); /* Defined for JS - Reduced size slightly */
+
+    --box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0,0,0,0.15);
+    --tooltip-bg: hsla(218, 13%, 16%, 0.95); /* bg-light with alpha */
+    --tooltip-shadow: 0 4px 10px rgba(0,0,0,0.3);
+    --scrollbar-thumb: var(--border-color);
+    --scrollbar-thumb-hover: var(--text-secondary);
+    --scrollbar-track-sidebar: var(--bg-medium);
+    --scrollbar-track-main: var(--bg-dark);
+    --kbd-bg: var(--bg-light);
+    --kbd-border: var(--border-color);
+    --kbd-text: var(--text-primary);
+    --axis-border-color: var(--border-color);
     --axis-text-color: var(--text-secondary);
-    --axis-font: 24px var(--font-family); /* Defined for JS */
+    --plot-bg: var(--bg-dark);
+    --plot-title-bg: var(--bg-medium);
+    --plot-corner-bg: var(--bg-dark);
+    --modal-bg: var(--bg-medium);
+    --modal-content-bg: var(--bg-dark);
+    --modal-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
+    --modal-overlay-bg: rgba(0, 0, 0, 0.6);
+    --button-bg: var(--bg-light);
+    --button-hover-bg: hsl(from var(--bg-light) h s calc(l + 5%));
+    --button-active-bg: hsl(from var(--bg-light) h s calc(l - 3%));
+    --button-border: var(--border-color);
+    --button-hover-border: hsl(from var(--border-color) h s calc(l + 5%));
+    --input-bg: var(--bg-medium);
+    --input-border: var(--border-color);
+    --checkbox-bg: var(--bg-medium);
+    --checkbox-checked-bg: var(--accent-primary);
+    --checkbox-checked-mark: var(--bg-medium);
+    --checkbox-border: var(--border-color);
+    --list-item-hover-bg: var(--bg-light);
+    --placeholder-bg: var(--bg-medium);
+    --placeholder-border: var(--border-color);
+    --loading-bg: var(--bg-light);
+    --hydra-btn-bg: transparent;
+    --hydra-btn-hover-bg: var(--bg-light);
+    --hydra-btn-border: var(--border-color);
+    --hydra-btn-color: var(--text-secondary);
+    --hydra-btn-hover-color: var(--accent-primary);
+    --toggle-btn-color: var(--text-secondary);
+    --toggle-btn-hover-color: var(--text-primary);
+    --toggle-btn-hover-bg: var(--bg-light);
+    --header-bg: var(--bg-dark); /* For sticky search */
+    --header-border: var(--border-color);
+    --metric-group-bg: var(--bg-medium);
+    --metric-group-border: var(--border-color);
+    --metric-group-hover-border: hsl(from var(--border-color) h s calc(l + 5%));
+    --metric-group-header-hover-bg: var(--bg-light);
+    --resizer-bg: var(--border-color);
+    --resizer-hover-bg: var(--accent-secondary);
+    --resizer-active-bg: var(--accent-primary);
+    --reopen-btn-bg: var(--bg-light);
+    --reopen-btn-hover-bg: hsl(from var(--bg-light) h s calc(l + 8%));
+    --reopen-btn-border: var(--border-color);
+    --reopen-btn-color: var(--text-secondary);
+    --reopen-btn-hover-color: var(--text-primary);
+}
+
+/* --- Light Theme --- */
+html[data-theme="light"] {
+    --bg-deep-dark: #f0f2f5;   /* Lightest background */
+    --bg-dark: #ffffff;        /* Main content background */
+    --bg-medium: #f8f9fa;      /* Sidebar, Card backgrounds */
+    --bg-light: #e9ecef;       /* Hover states, subtle elements */
+    --border-color: #dee2e6;     /* Borders */
+    --text-primary: #212529;   /* Primary text */
+    --text-secondary: #6c757d; /* Slightly softer secondary */
+    --text-placeholder: #adb5bd; /* Placeholder text */
+    --accent-primary: #007bff; /* Primary accent (standard blue) */
+    --accent-secondary: #4dabf7; /* Lighter accent / hover */
+    --accent-primary-rgb: 0, 123, 255;
+    --error-color: #dc3545;
+    --error-bg: rgba(220, 53, 69, 0.1);
+    --success-color: #28a745;
+    --box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0,0,0,0.08); /* Lighter shadow */
+    --tooltip-bg: hsla(0, 0%, 100%, 0.95); /* White with alpha */
+    --tooltip-shadow: 0 4px 10px rgba(0,0,0,0.15);
+    --scrollbar-thumb: #adb5bd;
+    --scrollbar-thumb-hover: #868e96;
+    --scrollbar-track-sidebar: var(--bg-medium);
+    --scrollbar-track-main: var(--bg-dark);
+    --kbd-bg: #e9ecef;
+    --kbd-border: #ced4da;
+    --kbd-text: #495057;
+    --axis-border-color: var(--border-color);
+    --axis-text-color: var(--text-secondary);
+    --plot-bg: var(--bg-dark);
+    --plot-title-bg: var(--bg-medium);
+    --plot-corner-bg: var(--bg-dark);
+    --modal-bg: var(--bg-medium);
+    --modal-content-bg: var(--bg-dark);
+    --modal-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    --modal-overlay-bg: rgba(0, 0, 0, 0.4); /* Keep overlay darkish */
+    --button-bg: #f8f9fa; /* Lighter button */
+    --button-hover-bg: #e9ecef;
+    --button-active-bg: #dee2e6;
+    --button-border: #ced4da;
+    --button-hover-border: #adb5bd;
+    --input-bg: #ffffff;
+    --input-border: #ced4da;
+    --checkbox-bg: #ffffff;
+    --checkbox-checked-bg: var(--accent-primary);
+    --checkbox-checked-mark: #ffffff;
+    --checkbox-border: #adb5bd;
+    --list-item-hover-bg: var(--bg-light);
+    --placeholder-bg: var(--bg-medium);
+    --placeholder-border: var(--border-color);
+    --loading-bg: var(--bg-light);
+    --hydra-btn-bg: transparent;
+    --hydra-btn-hover-bg: var(--bg-light);
+    --hydra-btn-border: var(--border-color);
+    --hydra-btn-color: var(--text-secondary);
+    --hydra-btn-hover-color: var(--accent-primary);
+    --toggle-btn-color: var(--text-secondary);
+    --toggle-btn-hover-color: var(--text-primary);
+    --toggle-btn-hover-bg: var(--bg-light);
+    --header-bg: var(--bg-dark);
+    --header-border: var(--border-color);
+    --metric-group-bg: var(--bg-medium);
+    --metric-group-border: var(--border-color);
+    --metric-group-hover-border: #ced4da;
+    --metric-group-header-hover-bg: var(--bg-light);
+    --resizer-bg: var(--border-color);
+    --resizer-hover-bg: var(--accent-secondary);
+    --resizer-active-bg: var(--accent-primary);
+    --reopen-btn-bg: var(--bg-light);
+    --reopen-btn-hover-bg: #dee2e6;
+    --reopen-btn-border: var(--border-color);
+    --reopen-btn-color: var(--text-secondary);
+    --reopen-btn-hover-color: var(--text-primary);
 }
 
 /* Basic Reset */
@@ -63,21 +194,23 @@
 
 html {
     font-size: var(--font-size-base);
-    background-color: var(--bg-deep-dark);
+    background-color: var(--bg-deep-dark); /* Use variable */
+    color-scheme: light dark; /* Indicate support for both modes */
 }
 
 body {
     font-family: var(--font-family);
-    color: var(--text-primary);
+    color: var(--text-primary); /* Use variable */
     line-height: var(--line-height-base);
     height: 100vh;
     overflow: hidden;
-    background-color: var(--bg-dark); /* Body bg */
+    background-color: var(--bg-dark); /* Use variable */
 }
 
 h1, h2, h3, h4, h5, h6 {
     line-height: 1.3;
     font-weight: 500; /* Slightly lighter headings */
+    color: var(--text-primary); /* Ensure headings use primary text color */
 }
 
 a {
@@ -95,16 +228,16 @@ button, input[type="button"], input[type="submit"], input[type="reset"] {
     cursor: pointer;
     padding: var(--spacing-sm) var(--spacing-md);
     border-radius: var(--border-radius);
-    border: 1px solid var(--border-color);
-    background-color: var(--bg-light);
-    color: var(--text-primary);
+    border: 1px solid var(--button-border); /* Use variable */
+    background-color: var(--button-bg); /* Use variable */
+    color: var(--text-primary); /* Use variable */
 }
 button:hover, input[type="button"]:hover, input[type="submit"]:hover, input[type="reset"]:hover {
-    background-color: hsl(from var(--bg-light) h s calc(l + 5%));
-    border-color: hsl(from var(--border-color) h s calc(l + 5%));
+    background-color: var(--button-hover-bg); /* Use variable */
+    border-color: var(--button-hover-border); /* Use variable */
 }
 button:active, input[type="button"]:active, input[type="submit"]:active, input[type="reset"]:active {
-    background-color: hsl(from var(--bg-light) h s calc(l - 3%));
+    background-color: var(--button-active-bg); /* Use variable */
 }
 button:focus-visible, input[type="button"]:focus-visible, input[type="submit"]:focus-visible, input[type="reset"]:focus-visible {
     outline: none;
@@ -122,8 +255,8 @@ button:focus-visible, input[type="button"]:focus-visible, input[type="submit"]:f
 
 /* Sidebar Styling */
 #sidebar {
-    background-color: var(--bg-medium);
-    border-right: 1px solid var(--border-color);
+    background-color: var(--bg-medium); /* Use variable */
+    border-right: 1px solid var(--border-color); /* Use variable */
     padding: var(--spacing-lg);
     display: flex;
     flex-direction: column;
@@ -141,7 +274,7 @@ button:focus-visible, input[type="button"]:focus-visible, input[type="submit"]:f
 #resizer {
     grid-column: 2 / 3;
     cursor: col-resize;
-    background-color: var(--border-color);
+    background-color: var(--resizer-bg); /* Use variable */
     height: 100%;
     width: var(--resizer-width);
     opacity: 1;
@@ -149,10 +282,10 @@ button:focus-visible, input[type="button"]:focus-visible, input[type="submit"]:f
     z-index: 10;
 }
 #resizer:hover {
-     background-color: var(--accent-secondary);
+     background-color: var(--resizer-hover-bg); /* Use variable */
 }
 body.resizing #resizer { /* Style when actively resizing */
-    background-color: var(--accent-primary);
+    background-color: var(--resizer-active-bg); /* Use variable */
 }
 body.resizing { /* Prevent text selection globally during resize */
     cursor: col-resize;
@@ -166,43 +299,49 @@ body.resizing { /* Prevent text selection globally during resize */
     align-items: center;
     padding-bottom: var(--spacing-md);
     margin-bottom: var(--spacing-lg);
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color); /* Use variable */
     flex-shrink: 0;
 }
 .sidebar-header h2 {
     font-size: var(--font-size-large);
     font-weight: 600;
-    color: var(--text-primary);
+    color: var(--text-primary); /* Use variable */
     margin: 0;
     white-space: nowrap;
     flex-grow: 1; /* Take available space */
 }
-#sidebar-toggle-btn {
+
+/* Sidebar Header Buttons (Toggle Sidebar, Theme) */
+#sidebar-toggle-btn,
+#theme-toggle-btn {
     background: none;
     border: none;
-    color: var(--text-secondary);
+    color: var(--text-secondary); /* Use variable */
     font-size: var(--font-size-large);
     font-weight: bold;
     cursor: pointer;
-    padding: 0 var(--spacing-sm);
+    padding: 0; /* Remove padding */
     line-height: 1;
     border-radius: var(--border-radius);
-    margin-left: var(--spacing-md);
+    margin-left: var(--spacing-sm); /* Adjusted margin */
     flex-shrink: 0;
     display: grid; /* For centering icon */
     place-items: center;
     width: 28px;
     height: 28px;
 }
-#sidebar-toggle-btn:hover {
-    background-color: var(--bg-light);
-    color: var(--text-primary);
+#sidebar-toggle-btn:hover,
+#theme-toggle-btn:hover {
+    background-color: var(--toggle-btn-hover-bg); /* Use variable */
+    color: var(--toggle-btn-hover-color); /* Use variable */
 }
-#sidebar-toggle-btn:focus-visible {
+#sidebar-toggle-btn:focus-visible,
+#theme-toggle-btn:focus-visible {
     outline: none;
     box-shadow: var(--focus-ring-shadow);
 }
-#sidebar-toggle-btn svg { /* SVG icon for toggle */
+#sidebar-toggle-btn svg,
+#theme-toggle-btn svg { /* SVG icon for toggle */
     width: 1em;
     height: 1em;
     fill: currentColor;
@@ -216,9 +355,9 @@ body.resizing { /* Prevent text selection globally during resize */
     left: var(--reopen-button-offset);
     width: var(--reopen-button-width);
     height: var(--reopen-button-width);
-    background-color: var(--bg-light);
-    border: 1px solid var(--border-color);
-    color: var(--text-secondary);
+    background-color: var(--reopen-btn-bg); /* Use variable */
+    border: 1px solid var(--reopen-btn-border); /* Use variable */
+    color: var(--reopen-btn-color); /* Use variable */
     font-size: var(--font-size-large);
     cursor: pointer;
     border-radius: 50%;
@@ -228,8 +367,8 @@ body.resizing { /* Prevent text selection globally during resize */
     opacity: 0.8;
 }
 #sidebar-reopen-btn:hover {
-    background-color: hsl(from var(--bg-light) h s calc(l + 8%));
-    color: var(--text-primary);
+    background-color: var(--reopen-btn-hover-bg); /* Use variable */
+    color: var(--reopen-btn-hover-color); /* Use variable */
     opacity: 1;
 }
 #sidebar-reopen-btn:focus-visible {
@@ -279,7 +418,7 @@ body.resizing { /* Prevent text selection globally during resize */
 }
 #controls-container h3 {
     font-size: var(--font-size-base); /* Smaller heading */
-    color: var(--text-secondary);
+    color: var(--text-secondary); /* Use variable */
     margin-bottom: var(--spacing-sm); /* Less margin */
     font-weight: 500;
     padding-left: var(--spacing-xs); /* Slight indent */
@@ -302,8 +441,8 @@ body.resizing { /* Prevent text selection globally during resize */
 #run-selector {
     flex-grow: 1; /* Take remaining space */
     overflow-y: auto;
-    border: 1px solid var(--border-color);
-    background-color: var(--bg-dark); /* Slightly darker list bg */
+    border: 1px solid var(--border-color); /* Use variable */
+    background-color: var(--plot-bg); /* Use variable (match plot bg) */
     border-radius: var(--border-radius);
     padding: var(--spacing-sm);
     min-height: 150px;
@@ -311,7 +450,7 @@ body.resizing { /* Prevent text selection globally during resize */
     flex-direction: column;
 }
 #run-selector p { /* Placeholder inside list */
-    color: var(--text-placeholder);
+    color: var(--text-placeholder); /* Use variable */
     padding: var(--spacing-lg);
     text-align: center;
     margin: auto; /* Center vertically */
@@ -326,7 +465,7 @@ body.resizing { /* Prevent text selection globally during resize */
     gap: var(--spacing-sm); /* Add gap between elements */
 }
 .run-checkbox-item:hover {
-    background-color: var(--bg-light);
+    background-color: var(--list-item-hover-bg); /* Use variable */
 }
 .run-checkbox-item label {
     /* margin-left: var(--spacing-md); Removed, using gap now */
@@ -334,7 +473,7 @@ body.resizing { /* Prevent text selection globally during resize */
     display: inline-flex;
     align-items: center;
     flex-grow: 1; /* Allow label to grow */
-    color: var(--text-primary);
+    color: var(--text-primary); /* Use variable */
     font-size: var(--font-size-base);
     white-space: nowrap;
     overflow: hidden;
@@ -350,8 +489,8 @@ body.resizing { /* Prevent text selection globally during resize */
     width: 16px;
     height: 16px;
     flex-shrink: 0;
-    background-color: var(--bg-medium); /* Checkbox background */
-    border: 1px solid var(--border-color);
+    background-color: var(--checkbox-bg); /* Use variable */
+    border: 1px solid var(--checkbox-border); /* Use variable */
     border-radius: 3px;
     appearance: none;
     -webkit-appearance: none;
@@ -364,16 +503,15 @@ body.resizing { /* Prevent text selection globally during resize */
     height: 0.65em;
     transform: scale(0);
     /* Checkmark using clip-path */
-    background-color: var(--text-primary); /* Checkmark color */
+    background-color: var(--checkbox-checked-mark); /* Use variable */
     clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
 }
 .run-checkbox-item input[type="checkbox"]:checked {
-    background-color: var(--accent-primary);
-    border-color: var(--accent-primary);
+    background-color: var(--checkbox-checked-bg); /* Use variable */
+    border-color: var(--checkbox-checked-bg); /* Use variable */
 }
 .run-checkbox-item input[type="checkbox"]:checked::before {
     transform: scale(1);
-    background-color: var(--bg-medium); /* Checkmark color on checked bg */
 }
 .run-checkbox-item input[type="checkbox"]:focus-visible {
     outline: none;
@@ -384,9 +522,9 @@ body.resizing { /* Prevent text selection globally during resize */
 
 /* Hydra Override Button */
 .hydra-overrides-btn {
-    background-color: transparent;
-    border: 1px solid var(--border-color);
-    color: var(--text-secondary);
+    background-color: var(--hydra-btn-bg); /* Use variable */
+    border: 1px solid var(--hydra-btn-border); /* Use variable */
+    color: var(--hydra-btn-color); /* Use variable */
     padding: 3px; /* Small padding */
     border-radius: 50%; /* Make it round */
     cursor: pointer;
@@ -398,11 +536,10 @@ body.resizing { /* Prevent text selection globally during resize */
     height: 22px;
     margin-left: auto; /* Push to the right */
     opacity: 0.7;
-    transition: background-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
 }
 .hydra-overrides-btn:hover {
-    background-color: var(--bg-light);
-    color: var(--accent-primary);
+    background-color: var(--hydra-btn-hover-bg); /* Use variable */
+    color: var(--hydra-btn-hover-color); /* Use variable */
     opacity: 1;
 }
 .hydra-overrides-btn:focus-visible {
@@ -419,7 +556,7 @@ body.resizing { /* Prevent text selection globally during resize */
 
 /* Modal Styles */
 .modal {
-    display: none; /* Hidden by default */
+    /* display: none; /* Controlled by JS */
     position: fixed; /* Stay in place */
     z-index: 1001; /* Sit on top */
     left: 0;
@@ -427,21 +564,21 @@ body.resizing { /* Prevent text selection globally during resize */
     width: 100%;
     height: 100%;
     overflow: auto; /* Enable scroll if needed (though content scrolls) */
-    background-color: rgba(0, 0, 0, 0.6); /* Black w/ opacity */
+    background-color: var(--modal-overlay-bg); /* Use variable */
     /* Use flex to center the modal content */
-    display: flex;
+    display: flex; /* Keep flex for centering */
     align-items: center;
     justify-content: center;
     padding: var(--spacing-lg); /* Padding around the content box */
 }
 
 .modal-content {
-    background-color: var(--bg-medium);
-    color: var(--text-primary);
+    background-color: var(--modal-bg); /* Use variable */
+    color: var(--text-primary); /* Use variable */
     padding: var(--spacing-lg);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--border-color); /* Use variable */
     border-radius: var(--border-radius);
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--modal-shadow); /* Use variable */
     width: 80%; /* Adjust as needed */
     max-width: 700px; /* Max width */
     max-height: 80vh; /* Max height */
@@ -454,13 +591,14 @@ body.resizing { /* Prevent text selection globally during resize */
     margin-top: 0;
     margin-bottom: var(--spacing-md);
     padding-bottom: var(--spacing-md);
-    border-bottom: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color); /* Use variable */
     font-size: var(--font-size-medium);
     font-weight: 500;
+    color: var(--text-primary); /* Use variable */
 }
 
 .modal-close-btn {
-    color: var(--text-secondary);
+    color: var(--text-secondary); /* Use variable */
     position: absolute;
     top: var(--spacing-sm);
     right: var(--spacing-md);
@@ -472,22 +610,22 @@ body.resizing { /* Prevent text selection globally during resize */
 }
 .modal-close-btn:hover,
 .modal-close-btn:focus {
-    color: var(--text-primary);
+    color: var(--text-primary); /* Use variable */
     text-decoration: none;
 }
 
 #hydra-modal-content {
     flex-grow: 1; /* Take remaining space */
     overflow-y: auto; /* Allow scrolling */
-    background-color: var(--bg-dark); /* Slightly different background */
+    background-color: var(--modal-content-bg); /* Use variable */
     padding: var(--spacing-md);
     border-radius: var(--border-radius);
     font-family: monospace;
     font-size: var(--font-size-small);
     white-space: pre-wrap; /* Wrap long lines */
     word-wrap: break-word; /* Break words if necessary */
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
+    border: 1px solid var(--border-color); /* Use variable */
+    color: var(--text-primary); /* Use variable */
     min-height: 100px; /* Ensure it has some height when loading */
 }
 
@@ -498,7 +636,7 @@ body.resizing { /* Prevent text selection globally during resize */
     display: inline-block;
     width: 12px;
     height: 12px;
-    border: 1px solid rgba(255,255,255,0.1); /* Subtle border */
+    border: 1px solid rgba(128,128,128,0.2); /* Neutral subtle border */
     margin-right: var(--spacing-sm);
     flex-shrink: 0;
     border-radius: 3px;
@@ -507,7 +645,7 @@ body.resizing { /* Prevent text selection globally during resize */
 /* Loading/Error */
 #loading-indicator, #error-message {
     font-size: var(--font-size-small);
-    color: var(--text-secondary);
+    color: var(--text-secondary); /* Use variable */
     padding: var(--spacing-sm) var(--spacing-md);
     border-radius: var(--border-radius);
     margin-top: var(--spacing-sm);
@@ -516,7 +654,7 @@ body.resizing { /* Prevent text selection globally during resize */
 #loading-indicator {
     display: flex;
     align-items: center;
-    background-color: var(--bg-light);
+    background-color: var(--loading-bg); /* Use variable */
 }
 #loading-indicator::before { /* Spinner */
     content: '';
@@ -532,25 +670,25 @@ body.resizing { /* Prevent text selection globally during resize */
 @keyframes spinner { to { transform: rotate(360deg); } }
 
 #error-message {
-    color: var(--error-color);
-    background-color: var(--error-bg);
-    border: 1px solid var(--error-color);
+    color: var(--error-color); /* Use variable */
+    background-color: var(--error-bg); /* Use variable */
+    border: 1px solid var(--error-color); /* Use variable */
 }
 
 /* Sidebar Footer */
 .sidebar-footer {
     margin-top: auto; /* Push to bottom */
     padding-top: var(--spacing-lg);
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-color); /* Use variable */
     font-size: var(--font-size-small);
-    color: var(--text-secondary);
+    color: var(--text-secondary); /* Use variable */
     flex-shrink: 0;
     margin-top: var(--spacing-lg);
 }
 .sidebar-footer p { /* Section title */
      font-weight: 500;
      margin-bottom: var(--spacing-sm);
-     color: var(--text-primary);
+     color: var(--text-primary); /* Use variable */
 }
 .sidebar-footer ul { list-style: none; padding-left: 0; }
 .sidebar-footer li { margin-bottom: var(--spacing-sm); }
@@ -559,9 +697,9 @@ body.resizing { /* Prevent text selection globally during resize */
     padding: 2px 5px;
     font-family: monospace;
     font-size: 0.9em;
-    color: var(--text-primary);
-    background-color: var(--bg-light);
-    border: 1px solid var(--border-color);
+    color: var(--kbd-text); /* Use variable */
+    background-color: var(--kbd-bg); /* Use variable */
+    border: 1px solid var(--kbd-border); /* Use variable */
     border-bottom-width: 2px; /* Give slight 3D feel */
     border-radius: 3px;
     /* box-shadow: inset 0 -1px 0 var(--border-color); */
@@ -571,7 +709,7 @@ body.resizing { /* Prevent text selection globally during resize */
 
 /* Main Content Area Styling */
 #main-content {
-    background-color: var(--bg-dark);
+    background-color: var(--bg-dark); /* Use variable */
     overflow-y: auto;
     display: flex;
     flex-direction: column;
@@ -584,8 +722,8 @@ body.resizing { /* Prevent text selection globally during resize */
 #search-bar-container {
     padding: var(--spacing-lg) var(--spacing-lg) var(--spacing-md); /* Adjust padding */
     flex-shrink: 0;
-    background-color: var(--bg-dark);
-    border-bottom: 1px solid var(--border-color);
+    background-color: var(--header-bg); /* Use variable */
+    border-bottom: 1px solid var(--header-border); /* Use variable */
     z-index: 5; /* Ensure above dashboard content */
     position: sticky; /* Keep search bar visible */
     top: 0;
@@ -594,9 +732,9 @@ body.resizing { /* Prevent text selection globally during resize */
     width: 100%;
     padding: var(--spacing-sm) var(--spacing-md);
     font-size: var(--font-size-base);
-    color: var(--text-primary);
-    background-color: var(--bg-medium);
-    border: 1px solid var(--border-color);
+    color: var(--text-primary); /* Use variable */
+    background-color: var(--input-bg); /* Use variable */
+    border: 1px solid var(--input-border); /* Use variable */
     border-radius: var(--border-radius);
     appearance: none; /* Includes removing default clear button */
     -webkit-appearance: none;
@@ -608,7 +746,7 @@ body.resizing { /* Prevent text selection globally during resize */
     box-shadow: var(--focus-ring-shadow);
 }
 #metric-search-input::placeholder {
-    color: var(--text-placeholder);
+    color: var(--text-placeholder); /* Use variable */
     opacity: 1;
 }
 /* Custom clear button for search (optional) */
@@ -629,12 +767,12 @@ body.resizing { /* Prevent text selection globally during resize */
 
 /* Placeholder Text */
 .placeholder-text {
-    color: var(--text-placeholder);
+    color: var(--text-placeholder); /* Use variable */
     text-align: center;
     font-size: var(--font-size-medium);
     padding: var(--spacing-xl) var(--spacing-lg);
-    background-color: var(--bg-medium);
-    border: 1px dashed var(--border-color);
+    background-color: var(--placeholder-bg); /* Use variable */
+    border: 1px dashed var(--placeholder-border); /* Use variable */
     border-radius: var(--border-radius);
     margin: auto; /* Vertically and horizontally center */
     max-width: 500px;
@@ -643,12 +781,12 @@ body.resizing { /* Prevent text selection globally during resize */
 
 /* Metric Groups */
 .metric-group {
-    background-color: var(--bg-medium);
+    background-color: var(--metric-group-bg); /* Use variable */
     border-radius: var(--border-radius);
-    border: 1px solid var(--border-color);
+    border: 1px solid var(--metric-group-border); /* Use variable */
 }
 .metric-group:hover {
-     border-color: hsl(from var(--border-color) h s calc(l + 5%));
+     border-color: var(--metric-group-hover-border); /* Use variable */
 }
 
 .metric-group-header {
@@ -660,12 +798,12 @@ body.resizing { /* Prevent text selection globally during resize */
     cursor: pointer;
 }
 .metric-group-header:hover {
-    background-color: var(--bg-light);
+    background-color: var(--metric-group-header-hover-bg); /* Use variable */
 }
 .metric-group-header h3 {
     font-size: var(--font-size-base);
     font-weight: 500;
-    color: var(--text-primary); /* Header text slightly more prominent */
+    color: var(--text-primary); /* Use variable */
     margin: 0;
     flex-grow: 1;
     white-space: nowrap;
@@ -677,7 +815,7 @@ body.resizing { /* Prevent text selection globally during resize */
 .toggle-button {
     background: none;
     border: none;
-    color: var(--text-secondary);
+    color: var(--toggle-btn-color); /* Use variable */
     cursor: pointer;
     font-size: 1.2em;
     padding: 0 var(--spacing-sm);
@@ -690,8 +828,8 @@ body.resizing { /* Prevent text selection globally during resize */
     border-radius: 50%; /* Round button */
 }
 .toggle-button:hover {
-    color: var(--text-primary);
-    background-color: var(--bg-light);
+    color: var(--toggle-btn-hover-color); /* Use variable */
+    background-color: var(--toggle-btn-hover-bg); /* Use variable */
 }
 .toggle-button svg {
     width: 0.7em;
@@ -716,7 +854,7 @@ body.resizing { /* Prevent text selection globally during resize */
     grid-template-columns: repeat(auto-fit, minmax(min(350px, 100%), 1fr)); /* Adjust min size */
     gap: var(--spacing-lg);
     padding: var(--spacing-lg);
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-color); /* Use variable */
     max-height: 5000px; /* Large value for expanded state */
     overflow: hidden;
 }
@@ -736,10 +874,10 @@ body.resizing { /* Prevent text selection globally during resize */
     grid-template-columns: var(--plot-yaxis-width) 1fr; /* Y-Axis | Plot */
     grid-template-rows: auto 1fr var(--plot-xaxis-height); /* Title | Plot | X-Axis */
     height: 350px; /* Default plot height */
-    background-color: var(--bg-dark); /* Slightly different plot background */
-    border: 1px solid var(--border-color);
+    background-color: var(--plot-bg); /* Use variable */
+    border: 1px solid var(--border-color); /* Use variable */
     border-radius: var(--border-radius);
-    box-shadow: var(--box-shadow);
+    box-shadow: var(--box-shadow); /* Use variable */
     overflow: hidden; /* Clip contents */
 }
 
@@ -749,11 +887,11 @@ body.resizing { /* Prevent text selection globally during resize */
     grid-row: 1 / 2;
     font-size: var(--font-size-small); /* Smaller title */
     font-weight: 500;
-    color: var(--text-secondary);
+    color: var(--text-secondary); /* Use variable */
     padding: var(--spacing-sm) var(--spacing-md);
     margin: 0;
-    border-bottom: 1px solid var(--border-color);
-    background-color: var(--bg-medium); /* Title background */
+    border-bottom: 1px solid var(--border-color); /* Use variable */
+    background-color: var(--plot-title-bg); /* Use variable */
     text-align: left;
     white-space: nowrap;
     overflow: hidden;
@@ -765,9 +903,9 @@ body.resizing { /* Prevent text selection globally during resize */
 .plot-yaxis-container {
     grid-column: 1 / 2;
     grid-row: 2 / 3;
-    border-right: 1px solid var(--border-color);
+    border-right: 1px solid var(--axis-border-color); /* Use variable */
     position: relative;
-    background-color: var(--bg-dark);
+    background-color: var(--plot-bg); /* Use variable */
 }
 .plot-yaxis { display: block; width: 100%; height: 100%; }
 
@@ -776,7 +914,7 @@ body.resizing { /* Prevent text selection globally during resize */
     grid-column: 2 / 3;
     grid-row: 2 / 3;
     position: relative;
-    background-color: var(--bg-dark);
+    background-color: var(--plot-bg); /* Use variable */
 }
 .plot-canvas {
     display: block;
@@ -792,18 +930,18 @@ body.resizing { /* Prevent text selection globally during resize */
 .plot-corner {
     grid-column: 1 / 2;
     grid-row: 3 / 4;
-    border-top: 1px solid var(--border-color);
-    border-right: 1px solid var(--border-color);
-    background-color: var(--bg-dark);
+    border-top: 1px solid var(--axis-border-color); /* Use variable */
+    border-right: 1px solid var(--axis-border-color); /* Use variable */
+    background-color: var(--plot-corner-bg); /* Use variable */
 }
 
 /* X-Axis */
 .plot-xaxis-container {
     grid-column: 2 / 3;
     grid-row: 3 / 4;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--axis-border-color); /* Use variable */
     position: relative;
-    background-color: var(--bg-dark);
+    background-color: var(--plot-bg); /* Use variable */
 }
 .plot-xaxis { display: block; width: 100%; height: 100%; }
 
@@ -812,24 +950,24 @@ body.resizing { /* Prevent text selection globally during resize */
 #plot-tooltip {
     position: absolute;
     display: none;
-    background-color: hsla(from var(--bg-light) h s l / 95%); /* Use HSL for alpha */
-    color: var(--text-primary);
+    background-color: var(--tooltip-bg); /* Use variable */
+    color: var(--text-primary); /* Use variable */
     padding: var(--spacing-sm) var(--spacing-md);
     border-radius: var(--border-radius);
     font-size: var(--font-size-small);
     pointer-events: none;
     z-index: 1000;
     white-space: nowrap;
-    border: 1px solid var(--border-color);
-    box-shadow: 0 4px 10px rgba(0,0,0,0.3); /* Slightly larger tooltip shadow */
+    border: 1px solid var(--border-color); /* Use variable */
+    box-shadow: var(--tooltip-shadow); /* Use variable */
     line-height: 1.4;
 }
 #plot-tooltip strong {
-    color: var(--text-primary); /* Ensure strong text is primary */
+    color: var(--text-primary); /* Use variable */
     font-weight: 500;
 }
 #plot-tooltip span[style*="background-color"] { /* Color swatch in tooltip */
-    border: 1px solid rgba(255,255,255,0.15);
+    border: 1px solid rgba(128,128,128,0.3); /* Neutral border */
 }
 
 /* Info Footer */
@@ -837,9 +975,9 @@ body.resizing { /* Prevent text selection globally during resize */
     margin-top: var(--spacing-xl);
     text-align: center;
     font-size: var(--font-size-small);
-    color: var(--text-secondary);
+    color: var(--text-secondary); /* Use variable */
     padding: var(--spacing-lg);
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-color); /* Use variable */
     flex-shrink: 0; /* Prevent shrinking */
 }
 .info p { margin-bottom: var(--spacing-xs); }
@@ -849,34 +987,34 @@ body.resizing { /* Prevent text selection globally during resize */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; /* Track blends with container */ }
 ::-webkit-scrollbar-thumb {
-    background-color: var(--border-color);
+    background-color: var(--scrollbar-thumb); /* Use variable */
     border-radius: 5px;
     border: 2px solid transparent; /* Creates padding effect */
     background-clip: padding-box; /* Important */
 }
 ::-webkit-scrollbar-thumb:hover {
-    background-color: var(--text-secondary);
+    background-color: var(--scrollbar-thumb-hover); /* Use variable */
 }
 /* Specific scrollbars */
 #sidebar::-webkit-scrollbar-track,
 #run-selector::-webkit-scrollbar-track {
-    background: var(--bg-medium);
+    background: var(--scrollbar-track-sidebar); /* Use variable */
 }
 #sidebar::-webkit-scrollbar-thumb,
 #run-selector::-webkit-scrollbar-thumb {
-    border-color: var(--bg-medium); /* Match track for padding */
+    border-color: var(--scrollbar-track-sidebar); /* Match track for padding */
 }
 
 #main-content::-webkit-scrollbar-track,
 #dashboard-container::-webkit-scrollbar-track {
-     background: var(--bg-dark);
+     background: var(--scrollbar-track-main); /* Use variable */
 }
 #main-content::-webkit-scrollbar-thumb,
 #dashboard-container::-webkit-scrollbar-thumb {
-     border-color: var(--bg-dark);
+     border-color: var(--scrollbar-track-main); /* Use variable */
 }
 
 /* Firefox scrollbar styling (optional) */
-/* * { scrollbar-width: thin; scrollbar-color: var(--border-color) transparent; }
-#sidebar, #run-selector { scrollbar-color: var(--border-color) var(--bg-medium); }
-#main-content, #dashboard-container { scrollbar-color: var(--border-color) var(--bg-dark); } */
+/* * { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
+#sidebar, #run-selector { scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track-sidebar); }
+#main-content, #dashboard-container { scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track-main); } */
