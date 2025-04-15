@@ -132,6 +132,7 @@ function sizeAxisCanvases(plotInfo) {
 // --- Search/Filter Logic (Keep as before) ---
 function handleMetricSearch() {
     if (!metricSearchInput) return;
+    const searchTerm = metricSearchInput.value.toLowerCase().trim();
     const allMetricGroups = dashboardContainer.querySelectorAll('.metric-group');
     let anyPlotVisibleOverall = false;
     const visiblePlotsToResize = [];
