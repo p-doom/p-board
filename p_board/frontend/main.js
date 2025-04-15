@@ -346,17 +346,16 @@ async function fetchDataForSelectedRuns() {
                 try { const errorData = await response.json(); if (errorData && errorData.error) { errorMsg += ` - ${errorData.error}`; } } catch(e) {}
                 throw new Error(errorMsg);
             }
-            fetchedScalarData = await response.json(); // This is the { metric: { run: {steps,...} } } structure
+            fetchedScalarData = await response.json();
             console.log(`Received scalar data for ${Object.keys(fetchedScalarData || {}).length} metrics for newly fetched runs.`);
 
             // --- Update frontend cache with fetched SCALAR data ---
             // Ensure the cache structure is initialized correctly
             for (const runName of runsToFetchScalars) {
                  if (!frontendDataCache[runName]) {
-                     frontendDataCache[runName] = { scalars: {}, hydra_overrides: null }; // Initialize structure
-                 } else if (!frontendDataCache[runName].scalars) {
-                     frontendDataCache[runName].scalars = {}; // Ensure scalars key exists
+                     frontendDataCache[runName] = {}; // Initialize as an empty object first
                  }
+                 frontendDataCache[runName].scalars = {};
             }
             // Populate the scalars
             for (const metricName in fetchedScalarData) {
@@ -503,12 +502,16 @@ async function handleViewOverridesClick(runName) {
         // Check frontend cache first (though backend stores it, this is a fallback/future optimization)
         let overridesText = frontendDataCache[runName]?.hydra_overrides;
 
-        if (overridesText === undefined) { // Only fetch if not even attempted before (null means attempted but none found)
+        if (overridesText === undefined) {
             const response = await fetch(`${API_BASE_URL}/api/overrides?run=${encodeURIComponent(runName)}`);
             if (!response.ok) {
                 let errorMsg = `Failed to fetch overrides: ${response.status} ${response.statusText}`;
                  if (response.status === 404) {
                      errorMsg = `No Hydra overrides found for run '${runName}'.`;
+                     if (!frontendDataCache[runName]) {
+                         frontendDataCache[runName] = {};
+                     }
+                     frontendDataCache[runName].hydra_overrides = null; // Use null to indicate "checked, none found"
                  } else {
                      try { const errorData = await response.json(); if (errorData && errorData.error) { errorMsg += ` - ${errorData.error}`; } } catch(e) {}
                  }
@@ -516,15 +519,17 @@ async function handleViewOverridesClick(runName) {
             }
             overridesText = await response.text();
 
-            // Optionally cache the fetched overrides in frontendDataCache
             if (!frontendDataCache[runName]) {
-                 frontendDataCache[runName] = { scalars: {}, hydra_overrides: null };
+                 frontendDataCache[runName] = {}; // Initialize run entry if needed
             }
-            frontendDataCache[runName].hydra_overrides = overridesText; // Store fetched text
+            // Store fetched text, DON'T initialize scalars here
+            frontendDataCache[runName].hydra_overrides = overridesText;
+
         } else if (overridesText === null) {
-             // This means we previously determined there are no overrides (either from fetchRuns or failed fetch)
+             // This means we previously checked and found no overrides
              throw new Error(`No Hydra overrides found for run '${runName}'.`);
         }
+        // If overridesText is already a string, we use the cached version directly
 
         // Display the overrides
         hydraModalContent.textContent = overridesText;
