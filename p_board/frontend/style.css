@@ -313,7 +313,8 @@ body.resizing { /* Prevent text selection globally during resize */
 
 /* Sidebar Header Buttons (Toggle Sidebar, Theme) */
 #sidebar-toggle-btn,
-#theme-toggle-btn {
+#theme-toggle-btn,
+#reload-btn {
     background: none;
     border: none;
     color: var(--text-secondary); /* Use variable */
@@ -331,22 +332,29 @@ body.resizing { /* Prevent text selection globally during resize */
     height: 28px;
 }
 #sidebar-toggle-btn:hover,
-#theme-toggle-btn:hover {
+#theme-toggle-btn:hover,
+#reload-btn:hover {
     background-color: var(--toggle-btn-hover-bg); /* Use variable */
     color: var(--toggle-btn-hover-color); /* Use variable */
 }
 #sidebar-toggle-btn:focus-visible,
-#theme-toggle-btn:focus-visible {
+#theme-toggle-btn:focus-visible,
+#reload-btn:focus-visible {
     outline: none;
     box-shadow: var(--focus-ring-shadow);
 }
 #sidebar-toggle-btn svg,
-#theme-toggle-btn svg { /* SVG icon for toggle */
+#theme-toggle-btn svg,
+#reload-btn svg {
     width: 1em;
     height: 1em;
     fill: currentColor;
 }
 
+/* Optional: Add animation for reload button when active */
+#reload-btn.reloading svg {
+    animation: spinner 0.75s linear infinite;
+}
 
 /* Reopen Button */
 #sidebar-reopen-btn {

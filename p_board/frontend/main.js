@@ -19,9 +19,10 @@ const hydraModal = document.getElementById('hydra-modal');
 const hydraModalRunName = document.getElementById('hydra-modal-run-name');
 const hydraModalContent = document.getElementById('hydra-modal-content');
 const hydraModalCloseBtn = hydraModal ? hydraModal.querySelector('.modal-close-btn') : null;
-const themeToggleBtn = document.getElementById('theme-toggle-btn'); // <-- NEW: Theme Toggle Button
-const themeIconSun = document.getElementById('theme-icon-sun');     // <-- NEW: Sun Icon
-const themeIconMoon = document.getElementById('theme-icon-moon');   // <-- NEW: Moon Icon
+const themeToggleBtn = document.getElementById('theme-toggle-btn');
+const themeIconSun = document.getElementById('theme-icon-sun');
+const themeIconMoon = document.getElementById('theme-icon-moon');
+const reloadBtn = document.getElementById('reload-btn');
 
 // --- Configuration ---
 const API_BASE_URL = '';
@@ -278,6 +279,7 @@ let debounceTimer = null;
 // Modified Cache Structure: Reflects backend change
 let frontendDataCache = {}; // Structure: { run_name: { scalars: { metric_name: { steps, values, wall_times } }, hydra_overrides: '...' | null } }
 let isResizing = false;
+let isReloading = false;
 
 // --- Color Palette & Mapping ---
 const COLORS = [
@@ -318,16 +320,43 @@ async function fetchRuns() {
         if (!response.ok) throw new Error(`Failed to fetch runs: ${response.status} ${response.statusText}`);
         const runsData = await response.json(); // Expecting [{name: 'run1', has_overrides: true}, ...]
 
-        // Process the received data
-        availableRuns = runsData.map(run => run.name);
-        runInfoMap = runsData.reduce((map, run) => {
-            map[run.name] = { has_overrides: run.has_overrides };
-            return map;
-        }, {});
+        // --- Compare with existing runs to see if list changed ---
+        const currentRunNames = new Set(availableRuns);
+        const newRunNames = new Set(runsData.map(run => run.name));
+        const listChanged = currentRunNames.size !== newRunNames.size || ![...currentRunNames].every(name => newRunNames.has(name));
+
+        if (listChanged) {
+             console.log("Run list changed during refresh.");
+             // Update state
+             availableRuns = runsData.map(run => run.name);
+             runInfoMap = runsData.reduce((map, run) => {
+                 map[run.name] = { has_overrides: run.has_overrides };
+                 return map;
+             }, {});
+             // Repopulate the selector UI
+             populateRunSelector();
+        } else {
+            console.log("Run list unchanged during refresh.");
+            // Optimization: If the list didn't change, we might not *need* to repopulate,
+            // but we should at least update the override status in runInfoMap and potentially the UI buttons
+            let overrideStatusChanged = false;
+            runsData.forEach(run => {
+                const oldInfo = runInfoMap[run.name];
+                const newHasOverrides = run.has_overrides;
+                if (!oldInfo || oldInfo.has_overrides !== newHasOverrides) {
+                    overrideStatusChanged = true;
+                }
+                 runInfoMap[run.name] = { has_overrides: newHasOverrides };
+            });
+            if (overrideStatusChanged) {
+                 console.log("Hydra override status changed for some runs. Updating UI.");
+                 // Update only the buttons in the existing UI instead of full repopulation
+                 updateHydraButtonsInSelector();
+            }
+        }
+
 
         console.log(`Fetched ${availableRuns.length} runs. Override info available for ${runsData.filter(r => r.has_overrides).length} runs.`);
-
-        populateRunSelector();
 
         if (availableRuns.length > 0) {
              runBulkControls.style.display = 'flex';
@@ -338,6 +367,8 @@ async function fetchRuns() {
         displayError(error.message || 'Could not connect to backend.');
         runSelectorContainer.innerHTML = '<p style="color: var(--error-color);">Could not load runs.</p>'; // Use CSS var
         runBulkControls.style.display = 'none';
+    } finally {
+         // loadingIndicator.style.display = 'none'; // Hide if shown above
     }
 }
 
@@ -495,6 +526,38 @@ function populateRunSelector() {
         runSelectorContainer.appendChild(div);
     });
 }
+
+
+// --- NEW: Function to update only Hydra buttons ---
+function updateHydraButtonsInSelector() {
+    const runItems = runSelectorContainer.querySelectorAll('.run-checkbox-item');
+    runItems.forEach(item => {
+        const checkbox = item.querySelector('input[type="checkbox"]');
+        const hydraBtn = item.querySelector('.hydra-overrides-btn');
+        if (checkbox && hydraBtn) {
+            const runName = checkbox.value;
+            const runInfo = runInfoMap[runName] || { has_overrides: false };
+            const shouldShow = runInfo.has_overrides;
+
+            if (shouldShow && hydraBtn.style.display === 'none') {
+                hydraBtn.style.display = 'flex';
+                // Add event listener if it wasn't there before (though populateRunSelector should handle initial)
+                if (!hydraBtn.dataset.listenerAttached) {
+                     hydraBtn.addEventListener('click', (e) => {
+                         e.stopPropagation();
+                         handleViewOverridesClick(runName);
+                     });
+                     hydraBtn.dataset.listenerAttached = 'true'; // Mark listener as attached
+                }
+            } else if (!shouldShow && hydraBtn.style.display !== 'none') {
+                hydraBtn.style.display = 'none';
+            }
+            // Ensure dataset runName is correct (should be fine but good practice)
+            hydraBtn.dataset.runName = runName;
+        }
+    });
+}
+
 
 // --- Run Selection & Bulk Actions (Keep as before) ---
 function handleRunSelectionChange(event, fromBulkAction = false) {
@@ -1127,11 +1190,49 @@ function loadInitialTheme() {
     });
 }
 
+
+// --- Reload Logic ---
+async function handleReloadClick() {
+    if (isReloading) {
+        console.log("Reload already in progress.");
+        return;
+    }
+    isReloading = true;
+    if (reloadBtn) reloadBtn.classList.add('reloading'); // Add visual indicator
+    if (loadingIndicator) {
+        loadingIndicator.textContent = 'Reloading data...'; // More specific message
+        loadingIndicator.style.display = 'block';
+    }
+    clearError(); // Clear previous errors
+    console.log("--- Manual Reload Triggered ---");
+
+    try {
+        // 1. Refresh the list of available runs (and their override status)
+        await fetchRuns();
+
+        // 2. Fetch data for currently selected runs and update plots
+        //    fetchDataAndResetView already handles showing/hiding its own loading indicator if needed
+        await fetchDataAndResetView();
+
+        console.log("--- Manual Reload Complete ---");
+
+    } catch (error) {
+        console.error("Error during manual reload:", error);
+        displayError(`Reload failed: ${error.message || 'Unknown error'}`);
+    } finally {
+        isReloading = false;
+        if (reloadBtn) reloadBtn.classList.remove('reloading');
+        if (loadingIndicator) loadingIndicator.style.display = 'none'; // Hide main reload indicator
+    }
+}
+
+
 // --- Initialization --- //
 async function initialize() {
     if (!plotTooltip) { console.error("FATAL: Tooltip element #plot-tooltip not found!"); displayError("Initialization failed: Tooltip element missing."); return; }
     if (!hydraModal) { console.warn("Hydra modal element #hydra-modal not found. Override viewing disabled."); /* Continue without modal */ }
     if (!themeToggleBtn || !themeIconSun || !themeIconMoon) { console.warn("Theme toggle elements not found. Theme switching disabled."); }
+    if (!reloadBtn) { console.warn("Reload button element not found."); }
 
     console.log("Initializing p-board...");
 
@@ -1146,8 +1247,12 @@ async function initialize() {
     if (themeToggleBtn) {
         themeToggleBtn.addEventListener('click', handleThemeToggle);
     }
+    if (reloadBtn) {
+        reloadBtn.addEventListener('click', handleReloadClick);
+    }
 
-    await fetchRuns(); // Fetch runs (includes override status)
+    // Initial fetch of runs (backend cache should be populated by now)
+    await fetchRuns();
 
     window.addEventListener('resize', handleGlobalResize);
     requestAnimationFrame(updateDashboard); // Start animation loop
