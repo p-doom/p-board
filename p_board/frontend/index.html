@@ -12,9 +12,7 @@
         <aside id="sidebar">
             <div class="sidebar-header">
                  <h2>p-board</h2>
-                 <!-- SIDEBAR TOGGLE BUTTON -->
                  <button id="sidebar-toggle-btn" aria-label="Toggle Sidebar" title="Toggle Sidebar">
-                    <!-- Icon: e.g., Chevron Left -->
                     <svg viewBox="0 0 24 24"><path d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
                  </button>
             </div>
@@ -26,9 +24,21 @@
                  </div>
                 <div id="run-selector">
                     <p>Loading runs...</p>
+                    <!-- Run items added by JS -->
+                    <!-- Example structure added by JS:
+                    <div class="run-checkbox-item">
+                        <input type="checkbox" id="run-example" value="example">
+                        <label for="run-example">
+                            <span class="color-swatch" style="background-color: red;"></span> example
+                        </label>
+                        <button class="hydra-overrides-btn" data-run-name="example" title="View Hydra Overrides" style="display: none;">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h11A1.5 1.5 0 0 1 15 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 13.5v-11zM2.5 2a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-11z"/><path d="M8 8.971h-.535a.5.5 0 0 1-.497-.462l-.6-3.6A.5.5 0 0 1 7 4.462h2a.5.5 0 0 1 .497.447l-.6 3.6a.5.5 0 0 1-.497.462H8zm-1.618-4.4L6 8.129h.535L7 5.597h2l.465 2.532h.535l-.382-3.558A1.5 1.5 0 0 0 8.997 3H7.003a1.5 1.5 0 0 0-1.498 1.36l-.62 3.21zM8 10.5a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0v-1a.5.5 0 0 1 .5-.5z"/></svg>
+                        </button>
+                    </div>
+                     -->
                 </div>
                 <div id="loading-indicator" style="display: none;">Fetching data...</div>
-                <div id="error-message" style="display: none;"></div> <!-- Hide error initially -->
+                <div id="error-message" style="display: none;"></div>
             </div>
              <div class="sidebar-footer">
                 <p>Controls:</p>
@@ -51,21 +61,28 @@
                  <!-- Metric groups will be added here by JS -->
             </div>
 
-            <div class="info" style="display: none;"> <!-- Hide info initially or remove if not needed -->
+            <div class="info" style="display: none;">
                  <p>p-board: suckless TensorBoard</p>
             </div>
         </main>
 
-        <!-- SIDEBAR REOPEN BUTTON -->
         <button id="sidebar-reopen-btn" aria-label="Open Sidebar" title="Open Sidebar">
-            <!-- Icon: e.g., Chevron Right -->
             <svg viewBox="0 0 24 24"><path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg>
         </button>
 
     </div> <!-- End app-container -->
 
     <!-- Tooltip Element -->
-    <div id="plot-tooltip"></div> <!-- Content set by JS -->
+    <div id="plot-tooltip"></div>
+
+    <!-- Hydra Overrides Modal -->
+    <div id="hydra-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="modal-close-btn" title="Close">&times;</span>
+            <h3>Hydra Overrides: <span id="hydra-modal-run-name" style="font-weight: normal; color: var(--text-secondary);"></span></h3>
+            <pre id="hydra-modal-content">Loading...</pre>
+        </div>
+    </div>
 
     <script src="webglplot.umd.min.js"></script>
     <script type="module" src="main.js"></script>

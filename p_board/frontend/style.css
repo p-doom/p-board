@@ -321,24 +321,26 @@ body.resizing { /* Prevent text selection globally during resize */
     align-items: center;
     padding: var(--spacing-sm) var(--spacing-md);
     border-radius: var(--border-radius);
-    margin-bottom: 2px; /* Tighter spacing */
+    margin-bottom: 2px;
     cursor: pointer;
+    gap: var(--spacing-sm); /* Add gap between elements */
 }
 .run-checkbox-item:hover {
     background-color: var(--bg-light);
 }
 .run-checkbox-item label {
-    margin-left: var(--spacing-md); /* More space after checkbox */
+    /* margin-left: var(--spacing-md); Removed, using gap now */
     cursor: pointer;
     display: inline-flex;
     align-items: center;
-    flex-grow: 1;
+    flex-grow: 1; /* Allow label to grow */
     color: var(--text-primary);
     font-size: var(--font-size-base);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    line-height: 1.3; /* Adjust line height */
+    line-height: 1.3;
+    min-width: 0; /* Important for flex shrink/grow with overflow */
 }
 
 /* Custom Checkbox */
@@ -378,6 +380,119 @@ body.resizing { /* Prevent text selection globally during resize */
     box-shadow: var(--focus-ring-shadow);
     border-color: var(--accent-primary);
 }
+
+
+/* Hydra Override Button */
+.hydra-overrides-btn {
+    background-color: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 3px; /* Small padding */
+    border-radius: 50%; /* Make it round */
+    cursor: pointer;
+    flex-shrink: 0; /* Don't shrink */
+    display: flex; /* Center icon */
+    align-items: center;
+    justify-content: center;
+    width: 22px; /* Fixed size */
+    height: 22px;
+    margin-left: auto; /* Push to the right */
+    opacity: 0.7;
+    transition: background-color 0.2s ease, color 0.2s ease, opacity 0.2s ease;
+}
+.hydra-overrides-btn:hover {
+    background-color: var(--bg-light);
+    color: var(--accent-primary);
+    opacity: 1;
+}
+.hydra-overrides-btn:focus-visible {
+    outline: none;
+    box-shadow: var(--focus-ring-shadow);
+    border-color: var(--accent-primary);
+    opacity: 1;
+}
+.hydra-overrides-btn svg {
+    width: 1em; /* Use em for scaling with font size if needed */
+    height: 1em;
+    vertical-align: middle; /* Align icon better */
+}
+
+/* Modal Styles */
+.modal {
+    display: none; /* Hidden by default */
+    position: fixed; /* Stay in place */
+    z-index: 1001; /* Sit on top */
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto; /* Enable scroll if needed (though content scrolls) */
+    background-color: rgba(0, 0, 0, 0.6); /* Black w/ opacity */
+    /* Use flex to center the modal content */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-lg); /* Padding around the content box */
+}
+
+.modal-content {
+    background-color: var(--bg-medium);
+    color: var(--text-primary);
+    padding: var(--spacing-lg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
+    width: 80%; /* Adjust as needed */
+    max-width: 700px; /* Max width */
+    max-height: 80vh; /* Max height */
+    position: relative; /* For positioning the close button */
+    display: flex;
+    flex-direction: column; /* Stack header and content */
+}
+
+.modal-content h3 {
+    margin-top: 0;
+    margin-bottom: var(--spacing-md);
+    padding-bottom: var(--spacing-md);
+    border-bottom: 1px solid var(--border-color);
+    font-size: var(--font-size-medium);
+    font-weight: 500;
+}
+
+.modal-close-btn {
+    color: var(--text-secondary);
+    position: absolute;
+    top: var(--spacing-sm);
+    right: var(--spacing-md);
+    font-size: 24px;
+    font-weight: bold;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 var(--spacing-xs);
+}
+.modal-close-btn:hover,
+.modal-close-btn:focus {
+    color: var(--text-primary);
+    text-decoration: none;
+}
+
+#hydra-modal-content {
+    flex-grow: 1; /* Take remaining space */
+    overflow-y: auto; /* Allow scrolling */
+    background-color: var(--bg-dark); /* Slightly different background */
+    padding: var(--spacing-md);
+    border-radius: var(--border-radius);
+    font-family: monospace;
+    font-size: var(--font-size-small);
+    white-space: pre-wrap; /* Wrap long lines */
+    word-wrap: break-word; /* Break words if necessary */
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    min-height: 100px; /* Ensure it has some height when loading */
+}
+
+
+/* ... (rest of the styles) ... */
 
 .color-swatch {
     display: inline-block;
