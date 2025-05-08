@@ -110,17 +110,8 @@ Once `p-board` is running and has loaded data:
 
 ## 🤝 Contributing
 
-Contributions are welcome! Whether it's bug fixes, feature enhancements, or documentation improvements, please feel free to:
+Contributions are welcome! Whether it's bug fixes, feature enhancements, or documentation improvements, please feel free to open a PR.
 
-1.  **Fork the repository.**
-2.  **Create a new branch:** `git checkout -b feature/your-amazing-feature` or `fix/describe-the-fix`.
-3.  **Make your changes.** Ensure your code is clean and well-commented.
-4.  **Test your changes thoroughly.**
-5.  **Commit your changes:** `git commit -m 'feat: Add some amazing feature'` (See Conventional Commits for good commit message practices).
-6.  **Push to the branch:** `git push origin feature/your-amazing-feature`.
-7.  **Open a Pull Request** against the `main` (or `master`) branch of the original repository.
-
-Please provide a clear description of your changes in the Pull Request.
 
 ## 🙏 Acknowledgements
 
