@@ -316,7 +316,9 @@ async function fetchRuns() {
     clearError();
     updatePlaceholderVisibility();
     try {
-        const response = await fetch(`${API_BASE_URL}/api/refresh`);
+        const response = await fetch(`${API_BASE_URL}/api/refresh`, {
+            method: 'POST',
+        });
         if (!response.ok) throw new Error(`Failed to fetch runs: ${response.status} ${response.statusText}`);
         const runsData = await response.json(); // Expecting [{name: 'run1', has_overrides: true}, ...]
 
