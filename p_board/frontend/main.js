@@ -199,9 +199,8 @@ function handleMetricSearch() {
                  wrapper.style.display = shouldDisplay;
             }
 
-            if (isMatch && metricName && activePlots[metricName] && wrapper.offsetParent !== null) {
+            if (isMatch && metricName && activePlots[metricName]) {
                 groupHasVisiblePlots = true;
-                anyPlotVisibleOverall = true;
                 visiblePlotsToResize.push(activePlots[metricName]);
             }
         });
@@ -213,13 +212,15 @@ function handleMetricSearch() {
     });
 
     requestAnimationFrame(() => {
+        let isAnyPlotRenderedAndVisible = false;
         visiblePlotsToResize.forEach(plotInfo => {
             const wrapper = document.getElementById(`plot-wrapper-${plotInfo.metricName.replace(/[^a-zA-Z0-9]/g, '-')}`);
             if (wrapper && wrapper.offsetParent !== null) { // Check if rendered and visible
                 resizePlot(plotInfo);
+                isAnyPlotRenderedAndVisible = true;
             }
         });
-        updatePlaceholderVisibility(anyPlotVisibleOverall, rawSearchTerm, !isValidRegex && rawSearchTerm !== '');
+        updatePlaceholderVisibility(isAnyPlotRenderedAndVisible, rawSearchTerm, !isValidRegex && rawSearchTerm !== '');
     });
 }
 // --- Global Resize Handler (Keep as before) ---
