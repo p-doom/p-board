@@ -18,6 +18,7 @@ RUN_DATA_CACHE = {} # Now stores {'run_name': {'scalars': {...}, 'hydra_override
 CACHE_LOAD_TIME = 0
 LOG_ROOT_DIR = None
 HYDRA_MULTIRUN_DIR = None # Store the path to hydra multirun
+HYDRA_SINGLE_RUN_LOG_DIR = None # New: Store the path to normal hydra log outputs
 REFRESH_INTERVAL_SECONDS = 60 # Refresh cache every 60 seconds
 background_thread = None
 stop_event = threading.Event() # Used to signal the background thread to stop
@@ -177,16 +178,110 @@ def find_hydra_overrides(tb_run_name, hydra_multirun_root, log_root_dir):
         app.logger.error(f"Error searching for log files in '{hydra_multirun_root}': {e_glob}", exc_info=True)
         return None
 
+def find_hydra_overrides_single_run(tb_run_name, hydra_single_run_root, tb_log_root_dir_context):
+    """
+    Tries to find Hydra overrides.yaml or config.yaml for a given TensorBoard run
+    by searching log files in 'normal' Hydra output directories. The expected structure
+    for these directories is hydra_single_run_root/YYYY-MM-DD/HH-MM-SS/, where the
+    HH-MM-SS directory contains the log files and the .hydra configuration.
+    Args:
+        tb_run_name (str): The directory name of the TensorBoard run (search term).
+        hydra_single_run_root (str): Absolute path to the root of Hydra single-run outputs
+                                     (e.g., 'outputs/' or 'logs/hydra/').
+        tb_log_root_dir_context (str): Absolute path to the main TensorBoard log directory
+                                       (parent of tb_run_name), for context.
+
+    Returns:
+        str | None: Content of overrides.yaml or config.yaml, or None if not found.
+    """
+    if not hydra_single_run_root or not os.path.isdir(hydra_single_run_root):
+        app.logger.debug(f"Single-run Hydra override search: hydra_single_run_root '{hydra_single_run_root}' is not a valid directory.")
+        return None
+
+    search_term = tb_run_name # This is the dir_name from tbparse
+    app.logger.debug(f"Single-run Hydra override search for TB run '{tb_run_name}' "
+                     f"using search term '{search_term}' in Hydra root '{hydra_single_run_root}' "
+                     f"(expected structure: DATE_DIR/TIME_DIR/*.log)")
+
+    hydra_root_path = Path(hydra_single_run_root)
+
+    # Iterate through date-stamped directories (e.g., YYYY-MM-DD)
+    for date_dir in hydra_root_path.iterdir():
+        if not date_dir.is_dir():
+            continue
+
+        # Iterate through time-stamped directories (e.g., HH-MM-SS)
+        # These are the actual Hydra job output directories
+        for hydra_job_output_dir in date_dir.iterdir():
+            if not hydra_job_output_dir.is_dir():
+                continue
+
+            app.logger.debug(f"Single-run search: Checking potential Hydra job output directory: {hydra_job_output_dir}")
+
+            # Look for common log files (e.g., *.log) within this hydra_job_output_dir
+            log_files_to_check = list(hydra_job_output_dir.glob('*.log'))
+            if not log_files_to_check:
+                app.logger.debug(f"Single-run search: No '*.log' files found in {hydra_job_output_dir}")
+                continue # Move to the next hydra_job_output_dir
+
+            found_in_log = False
+            for log_file in log_files_to_check:
+                # Path.glob should yield files, but an explicit check is safe.
+                if log_file.is_file():
+                    try:
+                        content_to_check = ""
+                        with open(log_file, 'r', encoding='utf-8', errors='ignore') as f:
+                            content_to_check = f.read(200 * 1024) # Check first 200KB
+
+                        if search_term in content_to_check:
+                            app.logger.info(f"Single-run search: Found search term '{search_term}' for TB run '{tb_run_name}' "
+                                            f"in Hydra log file: {log_file}")
+                            found_in_log = True
+                            break # Found the term, proceed with this hydra_job_output_dir
+                    except Exception as e_read:
+                        app.logger.warning(f"Single-run search: Could not read or search log file {log_file}: {e_read}")
+                        # Continue to the next log file if this one fails
+                        continue
+            
+            if found_in_log:
+                # If the search term was found, this hydra_job_output_dir is our candidate.
+                # Look for .hydra/overrides.yaml or .hydra/config.yaml within it.
+                hydra_config_subdir = hydra_job_output_dir / ".hydra"
+                
+                overrides_file = hydra_config_subdir / "overrides.yaml"
+                if overrides_file.is_file():
+                    app.logger.info(f"Single-run search: Found Hydra overrides.yaml for TB run '{tb_run_name}' at: {overrides_file}")
+                    try: return overrides_file.read_text(encoding='utf-8')
+                    except Exception as e_read_yaml: app.logger.error(f"Single-run search: Error reading overrides file {overrides_file}: {e_read_yaml}"); return None
+
+                config_yaml_file = hydra_config_subdir / "config.yaml" 
+                if config_yaml_file.is_file():
+                    app.logger.info(f"Single-run search: Found Hydra config.yaml (as fallback) for TB run '{tb_run_name}' at: {config_yaml_file}")
+                    try: return config_yaml_file.read_text(encoding='utf-8')
+                    except Exception as e_read_yaml: app.logger.error(f"Single-run search: Error reading config.yaml file {config_yaml_file}: {e_read_yaml}"); return None
+
+                # Log match found, but neither overrides.yaml nor config.yaml exists in .hydra for this candidate
+                app.logger.warning(f"Single-run search: Log match for '{tb_run_name}' in {hydra_job_output_dir}, "
+                                   f"but no .hydra/overrides.yaml or .hydra/config.yaml found.")
+                return None # This candidate, despite log match, didn't have the required Hydra files
+
+    # If loops complete without finding a log file containing the search term in the expected structure
+    app.logger.debug(f"Single-run search: No Hydra job output directory in '{hydra_root_path}' "
+                     f"(with structure DATE_DIR/TIME_DIR/*.log) found whose logs contain the term '{search_term}' "
+                     f"for TB run '{tb_run_name}'.")
+    return None
 
 # --- Preloading Function (Modified for Atomicity) ---
 def preload_all_runs_unified():
     """Loads scalar data and potentially Hydra overrides for ALL runs into a temporary cache,
        then atomically replaces the global cache."""
-    global RUN_DATA_CACHE, CACHE_LOAD_TIME, LOG_ROOT_DIR, HYDRA_MULTIRUN_DIR
+    global RUN_DATA_CACHE, CACHE_LOAD_TIME, LOG_ROOT_DIR, HYDRA_MULTIRUN_DIR, HYDRA_SINGLE_RUN_LOG_DIR
     start_time = time.time()
     app.logger.info(f"--- Background Refresh: Starting unified data loading from: {LOG_ROOT_DIR} ---")
     if HYDRA_MULTIRUN_DIR:
         app.logger.info(f"--- Background Refresh: Will attempt to find Hydra overrides in: {HYDRA_MULTIRUN_DIR} ---")
+    if HYDRA_SINGLE_RUN_LOG_DIR:
+        app.logger.info(f"--- Background Refresh: Will attempt to find Hydra single-run overrides in: {HYDRA_SINGLE_RUN_LOG_DIR} ---")
 
     temp_cache = {} # Build data into a temporary dictionary
 
@@ -319,34 +414,58 @@ def preload_all_runs_unified():
                     temp_cache[run_name]['scalars'] = dict(run_scalar_data)
 
         # --- Find Hydra Overrides for all runs in temp_cache ---
-        processed_runs_count = 0
         runs_with_data_or_overrides = set()
+
+        # Initial population of runs_with_data_or_overrides based on SCALARS
+        for run_name, data in temp_cache.items():
+            if data.get('scalars'): # Check for non-empty scalars dict
+                runs_with_data_or_overrides.add(run_name)
+
+        # 1. Try Multirun Hydra overrides
         if HYDRA_MULTIRUN_DIR:
             app.logger.info(f"Background Refresh: Checking for Hydra overrides for {len(temp_cache)} potential runs...")
-            for run_name in list(temp_cache.keys()): # Iterate over keys list for safe modification
+            for run_name in list(temp_cache.keys()):
+                # Ensure entry exists if it was purely a dir name without scalars initially
+                if run_name not in temp_cache: 
+                    temp_cache[run_name] = {'scalars': {}, 'hydra_overrides': None}
+
                 overrides_content = find_hydra_overrides(run_name, HYDRA_MULTIRUN_DIR, LOG_ROOT_DIR)
                 if overrides_content:
+                    if run_name not in temp_cache: # Should be there
+                         temp_cache[run_name] = {'scalars': {}, 'hydra_overrides': None}
                     temp_cache[run_name]['hydra_overrides'] = overrides_content
                     runs_with_data_or_overrides.add(run_name)
                     app.logger.debug(f"Background Refresh: Stored overrides for run '{run_name}'.")
-                # Check if the run has scalar data
-                if temp_cache[run_name].get('scalars'):
-                    runs_with_data_or_overrides.add(run_name)
 
-            # Filter temp_cache: keep only runs with data or overrides
-            final_temp_cache = {
-                run: data for run, data in temp_cache.items()
-                if run in runs_with_data_or_overrides
-            }
-            removed_count = len(temp_cache) - len(final_temp_cache)
-            if removed_count > 0:
-                app.logger.info(f"Background Refresh: Removed {removed_count} runs from cache that had neither scalar data nor overrides.")
-            temp_cache = final_temp_cache # Use the filtered cache
-            processed_runs_count = len(temp_cache)
+        # 2. Try Single-Run Hydra overrides if not found by multirun and dir is configured
+        if HYDRA_SINGLE_RUN_LOG_DIR:
+            app.logger.info(f"Background Refresh: Checking for single-run Hydra overrides for runs not yet having overrides...")
+            for run_name in list(temp_cache.keys()): # Iterate over all runs known so far
+                if run_name not in temp_cache: # Defensive
+                    temp_cache[run_name] = {'scalars': {}, 'hydra_overrides': None}
 
-        else: # No hydra dir, count runs with scalar data
-             processed_runs_count = len(temp_cache)
+                if temp_cache[run_name].get('hydra_overrides') is None: # Only if not already found by multirun
+                    app.logger.debug(f"Attempting single-run override search for: {run_name}")
+                    overrides_content_single = find_hydra_overrides_single_run(
+                        run_name,
+                        HYDRA_SINGLE_RUN_LOG_DIR,
+                        LOG_ROOT_DIR 
+                    )
+                    if overrides_content_single:
+                        temp_cache[run_name]['hydra_overrides'] = overrides_content_single
+                        runs_with_data_or_overrides.add(run_name) 
+                        app.logger.info(f"Background Refresh: Stored single-run overrides for run '{run_name}'.")
 
+        # Filter temp_cache: keep only runs that ended up with scalar data OR any kind of overrides
+        final_temp_cache = {
+            run: data_dict for run, data_dict in temp_cache.items()
+            if run in runs_with_data_or_overrides
+        }
+        removed_count = len(temp_cache) - len(final_temp_cache)
+        if removed_count > 0:
+            app.logger.info(f"Background Refresh: Removed {removed_count} entries from cache that had neither scalar data nor any overrides.")
+        temp_cache = final_temp_cache
+        processed_runs_count = len(temp_cache)
 
         # --- Atomically update the global cache ---
         RUN_DATA_CACHE = temp_cache
@@ -556,7 +675,7 @@ def serve_static(filename):
 
 # --- Main Execution / CLI Entry Point (Modified) ---
 def main():
-    global LOG_ROOT_DIR, HYDRA_MULTIRUN_DIR, REFRESH_INTERVAL_SECONDS
+    global LOG_ROOT_DIR, HYDRA_MULTIRUN_DIR, REFRESH_INTERVAL_SECONDS, HYDRA_SINGLE_RUN_LOG_DIR
 
     parser = argparse.ArgumentParser(
         description="p-board: A faster TensorBoard log viewer with Hydra support."
@@ -572,6 +691,15 @@ def main():
         type=str,
         default=None,
         help="Path to the Hydra multirun directory (e.g., 'multirun/'). If provided, attempts to link runs to overrides.",
+    )
+    parser.add_argument(
+        "--hydra-log-dir", 
+        type=str,
+        default=None,
+        help="Path to the root directory of 'normal' Hydra job outputs (e.g., 'outputs/'). "
+             "If provided, p-board will search these directories for logs containing "
+             "TensorBoard run names to link them to Hydra configs (overrides.yaml or config.yaml). "
+             "This is for non-multirun Hydra setups.",
     )
     parser.add_argument(
         "--refresh-interval",
@@ -604,6 +732,17 @@ def main():
              print(f"p-board: Using Hydra multirun directory: {HYDRA_MULTIRUN_DIR}")
     else:
         print("p-board: Hydra multirun directory not specified. Overrides will not be loaded.")
+
+    if args.hydra_log_dir:
+        HYDRA_SINGLE_RUN_LOG_DIR = os.path.abspath(args.hydra_log_dir)
+        if not os.path.isdir(HYDRA_SINGLE_RUN_LOG_DIR):
+            print(f"!!! WARNING: Specified Hydra single-run log directory does not exist: {HYDRA_SINGLE_RUN_LOG_DIR}. "
+                  "This type of override linking will be disabled.", file=sys.stderr)
+            HYDRA_SINGLE_RUN_LOG_DIR = None
+        else:
+            print(f"p-board: Using Hydra single-run log directory: {HYDRA_SINGLE_RUN_LOG_DIR} for override correlation.")
+    else:
+        print("p-board: Hydra single-run log directory not specified. Linking overrides via this method is disabled.")
 
 
     if args.debug:
