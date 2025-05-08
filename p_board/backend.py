@@ -406,22 +406,30 @@ def stop_background_refresh():
 
 # --- API Endpoints ---
 
-# Modified: Return run name and whether overrides exist
-@app.route("/api/runs")
-def get_runs():
-    app.logger.debug(f"Request received for /api/runs")
-    # Access cache safely (though atomic replacement helps)
-    current_cache = RUN_DATA_CACHE
+def _get_runs_info_from_cache(cache_to_inspect):
     available_runs_info = []
-    for run_name in sorted(current_cache.keys()):
-         run_entry = current_cache.get(run_name, {})
+    for run_name in sorted(cache_to_inspect.keys()):
+         run_entry = cache_to_inspect.get(run_name, {})
          available_runs_info.append({
              'name': run_name,
              'has_overrides': bool(run_entry.get('hydra_overrides'))
          })
+    return available_runs_info
 
+@app.route("/api/runs")
+def get_runs():
+    app.logger.debug(f"Request received for /api/runs")
+    current_cache_snapshot = RUN_DATA_CACHE.copy()
+    available_runs_info = _get_runs_info_from_cache(current_cache_snapshot)
     app.logger.debug(f"Returning {len(available_runs_info)} available runs from cache with override status.")
     return jsonify(available_runs_info)
+
+
+
+
+
+
+
 
 # New: Endpoint to get hydra overrides for a specific run
 @app.route("/api/overrides")
@@ -433,8 +441,7 @@ def get_overrides():
     app.logger.debug(f"Request: /api/overrides for run: {run_name}")
 
     # Access cache safely
-    current_cache = RUN_DATA_CACHE
-    run_data = current_cache.get(run_name)
+    run_data = RUN_DATA_CACHE.get(run_name)
     if not run_data:
         # Check if the run *might* exist on disk but wasn't cached (e.g., error during load)
         # For simplicity, we only report based on the current cache.
@@ -448,6 +455,29 @@ def get_overrides():
 
     app.logger.debug(f"Returning Hydra overrides for run '{run_name}'.")
     return Response(overrides_content, mimetype='text/plain')
+
+@app.route("/api/refresh", methods=['POST'])
+def trigger_refresh_and_return_cached_runs():
+    app.logger.info("POST /api/refresh: Request received. Will return current cached runs and trigger background refresh.")
+
+    current_cache_snapshot = RUN_DATA_CACHE.copy()
+    runs_to_return = _get_runs_info_from_cache(current_cache_snapshot)
+    app.logger.debug(f"/api/refresh: Prepared {len(runs_to_return)} cached runs for immediate response.")
+
+    def do_refresh_on_demand():
+        app.logger.info("/api/refresh: Starting on-demand background refresh.")
+        try:
+            preload_all_runs_unified()
+            app.logger.info("/api/refresh: On-demand background refresh completed successfully.")
+        except Exception as e:
+            app.logger.error(f"/api/refresh: Exception during on-demand background refresh: {e}", exc_info=True)
+
+    refresh_thread = threading.Thread(target=do_refresh_on_demand, daemon=True)
+    refresh_thread.start()
+    app.logger.info("/api/refresh: Initiated on-demand background refresh in a new thread.")
+
+    return jsonify(runs_to_return)
+
 
 
 # Modified: Access data within the 'scalars' key
@@ -467,10 +497,10 @@ def get_data():
     metrics_collected = set()
 
     # Access cache safely
-    current_cache = RUN_DATA_CACHE
+    current_cache_snapshot = RUN_DATA_CACHE
 
     for run_name in selected_runs:
-        run_cache_entry = current_cache.get(run_name)
+        run_cache_entry = current_cache_snapshot.get(run_name)
         run_scalars_from_cache = run_cache_entry.get('scalars') if run_cache_entry else None
 
         if run_scalars_from_cache: # Check if run exists AND has scalar data
