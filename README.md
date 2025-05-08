@@ -16,6 +16,7 @@ A blazing fast, lightweight, and dynamic web dashboard for visualizing and filte
 ## ✨ Key Features
 
 *   🚀 **High-Performance Plotting:** Utilizes `webgl-plot` for GPU-accelerated rendering of time-series data, enabling smooth visualization of large datasets.
+*   🐙 **Hydra Integration:** Automatically displays corresponding Hydra configurations for runs, supporting both single-run and multi-run (Hydra `multirun`) setups for easy correlation of metrics with experiment parameters.
 *   📂 **Metric Grouping:** Organizes related metrics into collapsible groups for a cleaner and more manageable view.
 *   🔍 **Advanced Filtering:**
     *   Instantly search for metrics by name within and across groups.
