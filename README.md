@@ -89,7 +89,7 @@ The `p-board` backend handles all the parsing and makes the data available to th
     ```bash
     p-board --logdir results/tensorboard
     ```
-    You can also specify the port (e.g., `--port 8080`) and the Hydra multirun directory (e.g., `--hydra-multirun-dir /path/to/your/hydra/multirun/`) if needed. Refer to `p_board/backend.py` for all available options (`python -m p_board.backend --help`).
+    You can also specify the port (e.g., `--port 8080`) and the Hydra single/multirun directory (e.g., `--hydra-log-dir path/to/hydra/outputs/singlerun/` or `--hydra-multirun-dir /path/to/your/hydra/multirun/`) if needed. Refer to `p_board/backend.py` for all available options (`python -m p_board.backend --help`).
     ```bash
     p-board --logdir results/tensorboard --port 8080 --hydra-multirun-dir path/to/hydra/outputs/multirun/
     ```
