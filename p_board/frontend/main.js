@@ -160,10 +160,22 @@ function sizeAxisCanvases(plotInfo) {
 // --- Search/Filter Logic (Keep as before) ---
 function handleMetricSearch() {
     if (!metricSearchInput) return;
-    const searchTerm = metricSearchInput.value.toLowerCase().trim();
+    const rawSearchTerm = metricSearchInput.value.trim();
     const allMetricGroups = dashboardContainer.querySelectorAll('.metric-group');
     let anyPlotVisibleOverall = false;
     const visiblePlotsToResize = [];
+
+    let searchRegex = null;
+    let isValidRegex = true;
+
+    if (rawSearchTerm !== '') {
+        try {
+            searchRegex = new RegExp(rawSearchTerm, 'i');
+        } catch (e) {
+            isValidRegex = false;
+            console.warn(`Invalid regex: "${rawSearchTerm}". Error: ${e.message}`);
+        }
+    }
 
     allMetricGroups.forEach(groupContainer => {
         const groupPlotsContainer = groupContainer.querySelector('.metric-group-plots');
@@ -172,8 +184,15 @@ function handleMetricSearch() {
 
         plotWrappers.forEach(wrapper => {
             const metricName = wrapper.dataset.metricName;
-            const metricNameLower = metricName?.toLowerCase();
-            let isMatch = searchTerm === '' || (metricNameLower && metricNameLower.includes(searchTerm));
+
+            let isMatch;
+            if (rawSearchTerm === '') {
+                isMatch = true;
+            } else if (isValidRegex && searchRegex && metricName) { // Valid regex and metric name exists
+                isMatch = searchRegex.test(metricName); // Test regex against the original metric name
+            } else {
+                isMatch = false;
+            }
 
             const shouldDisplay = isMatch ? '' : 'none';
             if (wrapper.style.display !== shouldDisplay) {
@@ -182,30 +201,26 @@ function handleMetricSearch() {
 
             if (isMatch && metricName && activePlots[metricName]) {
                 groupHasVisiblePlots = true;
-                anyPlotVisibleOverall = true;
-                // Only add if the wrapper is actually visible in the DOM
-                if (wrapper.offsetParent !== null) {
-                    visiblePlotsToResize.push(activePlots[metricName]);
-                }
+                visiblePlotsToResize.push(activePlots[metricName]);
             }
         });
 
-        const showGroup = searchTerm === '' || groupHasVisiblePlots;
+        const showGroup = rawSearchTerm === '' || groupHasVisiblePlots;
          if (groupContainer.style.display !== (showGroup ? '' : 'none')) {
             groupContainer.style.display = showGroup ? '' : 'none';
          }
     });
 
-    // Use requestAnimationFrame to ensure layout is updated before resizing
     requestAnimationFrame(() => {
+        let isAnyPlotRenderedAndVisible = false;
         visiblePlotsToResize.forEach(plotInfo => {
-            // Double-check visibility before resizing
             const wrapper = document.getElementById(`plot-wrapper-${plotInfo.metricName.replace(/[^a-zA-Z0-9]/g, '-')}`);
             if (wrapper && wrapper.offsetParent !== null) { // Check if rendered and visible
                 resizePlot(plotInfo);
+                isAnyPlotRenderedAndVisible = true;
             }
         });
-        updatePlaceholderVisibility(anyPlotVisibleOverall); // Update placeholder based on filter results
+        updatePlaceholderVisibility(isAnyPlotRenderedAndVisible, rawSearchTerm, !isValidRegex && rawSearchTerm !== '');
     });
 }
 // --- Global Resize Handler (Keep as before) ---
@@ -1098,25 +1113,21 @@ function updateDashboard() {
 }
 
 // --- Placeholder Visibility (Keep as before) ---
-function updatePlaceholderVisibility(anyPlotVisible = true) {
+function updatePlaceholderVisibility(anyPlotVisible = true, currentSearchTerm = '', isRegexInvalid = false) {
     if (!placeholderText) return;
     const noRunsSelected = selectedRuns.length === 0;
-    const searchTerm = metricSearchInput ? metricSearchInput.value.trim() : '';
-    const isFiltering = searchTerm !== '';
-    let hasVisiblePlots = false;
-    if (!noRunsSelected) {
-        // Check if any plot wrappers are actually displayed
-        const visibleWrappers = dashboardContainer.querySelectorAll('.plot-wrapper:not([style*="display: none"])');
-        hasVisiblePlots = visibleWrappers.length > 0;
-    }
+    const isFiltering = currentSearchTerm !== '';
 
     if (noRunsSelected) {
         placeholderText.textContent = "Select runs from the sidebar to view plots.";
         placeholderText.style.display = 'block';
-    } else if (isFiltering && !hasVisiblePlots) {
-        placeholderText.textContent = `No metrics found matching "${searchTerm}".`;
+    } else if (isRegexInvalid) {
+        placeholderText.textContent = `Invalid regular expression: "${currentSearchTerm}".`;
         placeholderText.style.display = 'block';
-    } else if (!isFiltering && !hasVisiblePlots && !noRunsSelected) {
+    } else if (isFiltering && !anyPlotVisible) {
+        placeholderText.textContent = `No metrics found matching "${currentSearchTerm}".`;
+        placeholderText.style.display = 'block';
+    } else if (!isFiltering && !anyPlotVisible && !noRunsSelected) {
         // This case needs refinement - could be no data OR all groups collapsed
         // Let's assume for now it means no data if not filtering
         placeholderText.textContent = "No plot data available for the selected runs, or all groups are collapsed.";
