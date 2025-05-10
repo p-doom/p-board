@@ -1026,3 +1026,72 @@ body.resizing { /* Prevent text selection globally during resize */
 /* * { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
 #sidebar, #run-selector { scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track-sidebar); }
 #main-content, #dashboard-container { scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track-main); } */
+
+.modal-section pre {
+    white-space: pre-wrap;       /* Allow wrapping for long Hydra overrides */
+    word-wrap: break-word;       /* Break words if necessary */
+    background-color: var(--background-secondary); /* Optional: background for pre blocks */
+    padding: 10px;
+    border-radius: 4px;
+    max-height: 300px; /* Optional: if content can be very long */
+    overflow-y: auto;
+}
+
+/* Styles for Collapsible Tree (Hyperparameters) */
+.collapsible-tree, .collapsible-tree-subtree {
+    list-style-type: none;
+    padding-left: 20px;
+    margin-top: 5px;
+}
+
+.collapsible-item > .collapsible-toggle {
+    cursor: pointer;
+    user-select: none;
+    font-weight: bold;
+    color: var(--text-primary);
+    padding: 2px 0;
+}
+
+.collapsible-item > .collapsible-toggle::before {
+    content: '▶'; /* Collapsed state icon */
+    display: inline-block;
+    margin-right: 6px;
+    font-size: 0.8em;
+    transition: transform 0.15s ease-in-out;
+    color: var(--text-secondary);
+}
+
+.collapsible-item.expanded > .collapsible-toggle::before {
+    transform: rotate(90deg); /* Expanded state icon */
+}
+
+.collapsible-leaf {
+    padding: 2px 0;
+    color: var(--text-primary);
+}
+
+.collapsible-leaf .collapsible-key {
+    /* font-weight: normal; */ /* Already less prominent than toggle */
+    color: var(--text-secondary);
+    margin-right: 5px;
+}
+.collapsible-leaf .collapsible-value {
+    /* color: var(--text-primary); */ /* Default text color */
+}
+
+/* Subtree initially hidden by JS (style.display = 'none') */
+.collapsible-item.expanded > .collapsible-tree-subtree {
+    display: block; /* Show when expanded */
+}
+
+.modal-section h4 {
+    margin-bottom: 8px;
+    color: var(--text-emphasis);
+}
+
+.modal-section {
+    margin-bottom: 15px;
+}
+.modal-section:last-child {
+    margin-bottom: 0;
+}

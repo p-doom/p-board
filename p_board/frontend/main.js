@@ -618,6 +618,7 @@ async function handleViewDetailsClick(runName) {
 
     let hydraOverridesHtml = '';
     let tbHParamsHtml = '';
+    let hparamsData; // Declare hparamsData in the function scope
     let errors = [];
 
     const runInfo = runInfoMap[runName] || { has_overrides: false, has_hparams: false };
@@ -625,7 +626,7 @@ async function handleViewDetailsClick(runName) {
     // --- Fetch Hydra Overrides ---
     if (runInfo.has_overrides) {
         try {
-            let overridesText = frontendDataCache[runName].hydra_overrides;
+            let overridesText = frontendDataCache[runName].hydra_overrides; // This let is fine as overridesText is only used in this block
             if (overridesText === undefined) { // Not cached or previously failed with undefined
                 const response = await fetch(`${API_BASE_URL}/api/overrides?run=${encodeURIComponent(runName)}`);
                 if (!response.ok) {
@@ -659,7 +660,7 @@ async function handleViewDetailsClick(runName) {
     // --- Fetch TensorBoard Hyperparameters ---
     if (runInfo.has_hparams) {
         try {
-            let hparamsData = frontendDataCache[runName].hparams;
+            hparamsData = frontendDataCache[runName].hparams; // Assign to the higher-scoped hparamsData
             if (hparamsData === undefined) {
                 const response = await fetch(`${API_BASE_URL}/api/hparams?run=${encodeURIComponent(runName)}`);
                 if (!response.ok) {
@@ -679,11 +680,7 @@ async function handleViewDetailsClick(runName) {
             if (hparamsData === null) { // Explicitly null means checked and none found
                 tbHParamsHtml = `<p style="color: var(--text-secondary);">No TensorBoard HParams found.</p>`;
             } else if (hparamsData && hparamsData.hparam_dict && Object.keys(hparamsData.hparam_dict).length > 0) {
-                let content = '';
-                for (const key in hparamsData.hparam_dict) {
-                    content += `${escapeHtml(key)}: ${escapeHtml(String(hparamsData.hparam_dict[key]))}\n`;
-                }
-                tbHParamsHtml = `<pre>${content}</pre>`;
+                // tbHParamsHtml will be handled by direct DOM manipulation later if actual data exists
             } else {
                 tbHParamsHtml = `<p style="color: var(--text-secondary);">No TensorBoard HParams data available.</p>`;
             }
@@ -696,29 +693,126 @@ async function handleViewDetailsClick(runName) {
         tbHParamsHtml = `<p style="color: var(--text-secondary);">TensorBoard HParams not available for this run.</p>`;
     }
 
-    // --- Update Modal Content ---
-    let finalModalContent = '';
+    // --- Update Modal Content using DOM manipulation to preserve event listeners ---
+    hydraModalContent.innerHTML = ''; // Clear previous content
+
     if (runInfo.has_overrides) {
-        finalModalContent += `
-            <div class="modal-section">
-                <h4>Hydra Overrides</h4>
-                ${hydraOverridesHtml}
-            </div>`;
+        const sectionDiv = document.createElement('div');
+        sectionDiv.className = 'modal-section';
+
+        const titleH4 = document.createElement('h4');
+        titleH4.textContent = 'Hydra Overrides';
+        sectionDiv.appendChild(titleH4);
+
+        // hydraOverridesHtml is already a string (e.g., <pre>...</pre> or <p>...</p>)
+        const contentDiv = document.createElement('div');
+        contentDiv.innerHTML = hydraOverridesHtml; // Safe for simple HTML strings without listeners
+        sectionDiv.appendChild(contentDiv);
+
+        hydraModalContent.appendChild(sectionDiv);
     }
+
     if (runInfo.has_hparams) {
-         finalModalContent += `
-            <div class="modal-section">
-                <h4>TensorBoard Hyperparameters</h4>
-                ${tbHParamsHtml}
-            </div>`;
+        const sectionDiv = document.createElement('div');
+        sectionDiv.className = 'modal-section';
+
+        const titleH4 = document.createElement('h4');
+        titleH4.textContent = 'TensorBoard Hyperparameters';
+        sectionDiv.appendChild(titleH4);
+
+        // Check if there's actual hparam data to render as a tree
+        if (hparamsData && hparamsData.hparam_dict && Object.keys(hparamsData.hparam_dict).length > 0) {
+            const unflattenedHParams = unflattenObject(hparamsData.hparam_dict);
+            const treeElement = renderCollapsibleTree(unflattenedHParams); // This is a live DOM node with listeners
+            sectionDiv.appendChild(treeElement); // Append the live node
+        } else {
+            // tbHParamsHtml contains the <p> tag for "No HParams found", "Error loading", or "No data"
+            const contentDiv = document.createElement('div');
+            contentDiv.innerHTML = tbHParamsHtml; // Safe for simple HTML strings
+            sectionDiv.appendChild(contentDiv);
+        }
+        hydraModalContent.appendChild(sectionDiv);
     }
 
-    if (!runInfo.has_overrides && !runInfo.has_hparams) {
-        finalModalContent = `<p style="color: var(--text-secondary);">No details (Hydra Overrides or TensorBoard HParams) available for this run.</p>`;
+    if (!runInfo.has_overrides && !runInfo.has_hparams) { // Neither type of detail is available
+        const p = document.createElement('p');
+        p.style.color = 'var(--text-secondary)';
+        p.textContent = 'No details (Hydra Overrides or TensorBoard HParams) available for this run.';
+        hydraModalContent.appendChild(p);
     }
 
-    hydraModalContent.innerHTML = finalModalContent;
     hydraModalContent.style.color = 'var(--text-primary)'; // Reset color after loading
+}
+
+/**
+ * Unflattens an object with delimited keys into a nested object.
+ * Example: {'a/b/c': 1} -> {a: {b: {c: 1}}}
+ * @param {object} flatObject The object to unflatten.
+ * @param {string} separator The delimiter used in the keys.
+ * @returns {object} The unflattened (nested) object.
+ */
+function unflattenObject(flatObject, separator = '/') {
+    const result = {};
+    if (typeof flatObject !== 'object' || flatObject === null) {
+        return result;
+    }
+
+    for (const path in flatObject) {
+        if (Object.prototype.hasOwnProperty.call(flatObject, path)) {
+            const keys = path.split(separator);
+            let currentLevel = result;
+            keys.forEach((key, index) => {
+                if (index === keys.length - 1) { // Last key in the path
+                    currentLevel[key] = flatObject[path];
+                } else {
+                    if (!currentLevel[key] || typeof currentLevel[key] !== 'object' || Array.isArray(currentLevel[key])) {
+                        currentLevel[key] = {};
+                    }
+                    currentLevel = currentLevel[key];
+                }
+            });
+        }
+    }
+    return result;
+}
+
+/**
+ * Renders a nested object as an HTML collapsible tree.
+ * @param {object} data The nested object to render.
+ * @param {boolean} isRoot Whether this is the root of the tree.
+ * @returns {HTMLUListElement} The UL element representing the tree.
+ */
+function renderCollapsibleTree(data, isRoot = true) {
+    const ul = document.createElement('ul');
+    ul.className = isRoot ? 'collapsible-tree' : 'collapsible-tree-subtree';
+
+    for (const key in data) {
+        if (Object.prototype.hasOwnProperty.call(data, key)) {
+            const li = document.createElement('li');
+            const value = data[key];
+
+            if (typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length > 0) {
+                li.classList.add('collapsible-item');
+                const toggle = document.createElement('span');
+                toggle.className = 'collapsible-toggle';
+                toggle.textContent = escapeHtml(key);
+                toggle.addEventListener('click', () => {
+                    li.classList.toggle('expanded');
+                    const subTree = li.querySelector('.collapsible-tree-subtree');
+                    if (subTree) subTree.style.display = li.classList.contains('expanded') ? 'block' : 'none';
+                });
+                li.appendChild(toggle);
+                const nestedUl = renderCollapsibleTree(value, false);
+                nestedUl.style.display = 'none'; // Initially collapsed
+                li.appendChild(nestedUl);
+            } else {
+                const displayValue = Array.isArray(value) ? `[${value.map(item => escapeHtml(String(item))).join(', ')}]` : (value === null ? 'null' : escapeHtml(String(value)));
+                li.innerHTML = `<span class="collapsible-leaf"><span class="collapsible-key">${escapeHtml(key)}:</span> <span class="collapsible-value">${displayValue}</span></span>`;
+            }
+            ul.appendChild(li);
+        }
+    }
+    return ul;
 }
 
 // Helper to escape HTML for display in <pre> or other elements
