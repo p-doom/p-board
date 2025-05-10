@@ -93,8 +93,18 @@
    <div id="hydra-modal" class="modal" style="display: none;">
        <div class="modal-content">
            <span class="modal-close-btn" title="Close">&times;</span>
-           <h3>Hydra Overrides: <span id="hydra-modal-run-name" style="font-weight: normal; color: var(--text-secondary);"></span></h3>
-           <pre id="hydra-modal-content">Loading...</pre>
+           <h3>Run Details: <span id="details-modal-run-name" style="font-weight: normal; color: var(--text-secondary);"></span></h3>
+           <div id="details-modal-content-wrapper">
+               <div class="modal-section" id="hydra-overrides-section" style="display: none;">
+                   <h4>Hydra Overrides</h4>
+                   <pre id="hydra-overrides-content">Loading...</pre>
+               </div>
+               <div class="modal-section" id="tb-hparams-section" style="display: none;">
+                   <h4>TensorBoard Hyperparameters</h4>
+                   <input type="search" id="hparams-search-input" placeholder="Filter hyperparameters..." style="display: none;">
+                   <div id="tb-hparams-content-tree">Loading...</div>
+               </div>
+           </div>
        </div>
    </div>
 
