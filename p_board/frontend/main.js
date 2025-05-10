@@ -1369,6 +1369,22 @@ function setupSearchFilter() {
     // console.log("Metric search filter initialized.");
 }
 
+// --- NEW: Function to get zoom rectangle color from CSS ---
+/**
+ * Reads CSS custom properties to determine the zoom rectangle color.
+ * @returns {ColorRGBA} The color for the zoom rectangle.
+ */
+function getZoomRectColorFromCSS() {
+    const computedStyle = getComputedStyle(document.documentElement);
+    // Provide defaults in case CSS variables are not set, though they should be.
+    const r = parseFloat(computedStyle.getPropertyValue('--zoom-rect-r').trim() || '0.5'); // Default to a mid-gray
+    const g = parseFloat(computedStyle.getPropertyValue('--zoom-rect-g').trim() || '0.5');
+    const b = parseFloat(computedStyle.getPropertyValue('--zoom-rect-b').trim() || '0.5');
+    const a = parseFloat(computedStyle.getPropertyValue('--zoom-rect-a').trim() || '0.7'); // Default alpha
+    return new ColorRGBA(r, g, b, a);
+}
+
+
 // --- Theme Toggling --- //
 
 /**
@@ -1392,6 +1408,15 @@ function setTheme(theme) {
 
     // Update axis styles immediately after setting theme attribute
     updateAxisTextStyle();
+
+    // Update zoom rectangle color for all active plots
+    const newZoomRectColor = getZoomRectColorFromCSS();
+    for (const metricName in activePlots) {
+        const plotInfo = activePlots[metricName];
+        if (plotInfo && plotInfo.zoomRectLine) {
+            plotInfo.zoomRectLine.color = newZoomRectColor;
+        }
+    }
 
     // Trigger a resize/redraw of axes for existing plots
     // We can force a resize which implicitly redraws axes in the next frame
