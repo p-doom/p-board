@@ -287,7 +287,7 @@ function drawAxisY(ctx2d, width, height, scale, offset, divs) {
 
 // --- State ---
 let availableRuns = []; // Will store just the names: ['run1', 'run2']
-let runInfoMap = {}; // Stores { runName: { has_overrides: boolean } }
+let runInfoMap = {}; // Stores { runName: { has_overrides: boolean, has_hparams: boolean } }
 let selectedRuns = [];
 let activePlots = {}; // Structure: { metric_name: { wglp, ..., lines: { run_name: line }, ... } }
 let debounceTimer = null;
@@ -343,11 +343,11 @@ async function fetchRuns() {
         const listChanged = currentRunNames.size !== newRunNames.size || ![...currentRunNames].every(name => newRunNames.has(name));
 
         if (listChanged) {
-             console.log("Run list changed during refresh.");
+             console.log("Run list changed during refresh. Repopulating selector.");
              // Update state
              availableRuns = runsData.map(run => run.name);
              runInfoMap = runsData.reduce((map, run) => {
-                 map[run.name] = { has_overrides: run.has_overrides };
+                 map[run.name] = { has_overrides: run.has_overrides, has_hparams: run.has_hparams }; // Store both flags
                  return map;
              }, {});
              // Repopulate the selector UI
@@ -356,24 +356,24 @@ async function fetchRuns() {
             console.log("Run list unchanged during refresh.");
             // Optimization: If the list didn't change, we might not *need* to repopulate,
             // but we should at least update the override status in runInfoMap and potentially the UI buttons
-            let overrideStatusChanged = false;
+            let runInfoStatusChanged = false;
             runsData.forEach(run => {
                 const oldInfo = runInfoMap[run.name];
                 const newHasOverrides = run.has_overrides;
-                if (!oldInfo || oldInfo.has_overrides !== newHasOverrides) {
-                    overrideStatusChanged = true;
+                const newHasHParams = run.has_hparams;
+                if (!oldInfo || oldInfo.has_overrides !== newHasOverrides || oldInfo.has_hparams !== newHasHParams) {
+                    runInfoStatusChanged = true;
                 }
-                 runInfoMap[run.name] = { has_overrides: newHasOverrides };
+                 runInfoMap[run.name] = { has_overrides: newHasOverrides, has_hparams: newHasHParams };
             });
-            if (overrideStatusChanged) {
-                 console.log("Hydra override status changed for some runs. Updating UI.");
+            if (runInfoStatusChanged) {
+                 console.log("Hydra override or HParams status changed for some runs. Updating UI buttons.");
                  // Update only the buttons in the existing UI instead of full repopulation
-                 updateHydraButtonsInSelector();
+                 updateDetailsButtonsInSelector();
             }
         }
 
-
-        console.log(`Fetched ${availableRuns.length} runs. Override info available for ${runsData.filter(r => r.has_overrides).length} runs.`);
+        console.log(`Fetched ${availableRuns.length} runs. Override info: ${runsData.filter(r => r.has_overrides).length}, HParams info: ${runsData.filter(r => r.has_hparams).length}.`);
 
         if (availableRuns.length > 0) {
              runBulkControls.style.display = 'flex';
@@ -391,7 +391,6 @@ async function fetchRuns() {
 
 async function fetchDataForSelectedRuns() {
     clearError();
-    updatePlaceholderVisibility();
 
     if (placeholderText) {
         placeholderText.style.display = selectedRuns.length === 0 ? 'block' : 'none';
@@ -406,7 +405,7 @@ async function fetchDataForSelectedRuns() {
 
     // --- Determine which runs need scalar data fetched ---
     // Note: We don't fetch overrides here, that's done on demand.
-    // We only check if scalar data for the run is already cached.
+    // We only check if scalar data for the run is already cached. HParams are also fetched on demand.
     const runsToFetchScalars = selectedRuns.filter(runName => !frontendDataCache[runName]?.scalars); // Check specifically for scalars
     const cachedRuns = selectedRuns.filter(runName => frontendDataCache[runName]?.scalars);
 
@@ -496,7 +495,7 @@ function populateRunSelector() {
     const sortedRunNames = [...availableRuns].sort((a, b) => a.localeCompare(b));
 
     sortedRunNames.forEach(runName => {
-        const runInfo = runInfoMap[runName] || { has_overrides: false }; // Default if somehow missing
+        const runInfo = runInfoMap[runName] || { has_overrides: false, has_hparams: false }; // Default if somehow missing
 
         const div = document.createElement('div');
         div.className = 'run-checkbox-item';
@@ -523,15 +522,16 @@ function populateRunSelector() {
         const hydraBtn = document.createElement('button');
         hydraBtn.className = 'hydra-overrides-btn';
         hydraBtn.dataset.runName = runName; // Store run name for the handler
-        hydraBtn.title = 'View Hydra Overrides';
+        hydraBtn.title = 'View Details (Overrides/HParams)'; // Updated title
         // Simple 'H' icon or use SVG like in index.html example
         hydraBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 0 1 2.5 1h11A1.5 1.5 0 0 1 15 2.5v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 13.5v-11zM2.5 2a.5.5 0 0 0-.5.5v11a.5.5 0 0 0 .5.5h11a.5.5 0 0 0 .5-.5v-11a.5.5 0 0 0-.5-.5h-11z"/><path d="M8 8.971h-.535a.5.5 0 0 1-.497-.462l-.6-3.6A.5.5 0 0 1 7 4.462h2a.5.5 0 0 1 .497.447l-.6 3.6a.5.5 0 0 1-.497.462H8zm-1.618-4.4L6 8.129h.535L7 5.597h2l.465 2.532h.535l-.382-3.558A1.5 1.5 0 0 0 8.997 3H7.003a1.5 1.5 0 0 0-1.498 1.36l-.62 3.21zM8 10.5a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0v-1a.5.5 0 0 1 .5-.5z"/></svg>`; // Example SVG Icon
 
-        if (runInfo.has_overrides) {
+        // Show button if either overrides or hparams exist
+        if (runInfo.has_overrides || runInfo.has_hparams) {
             hydraBtn.style.display = 'flex'; // Show button if overrides exist
             hydraBtn.addEventListener('click', (e) => {
                 e.stopPropagation(); // Prevent triggering label click/checkbox toggle
-                handleViewOverridesClick(runName);
+                handleViewDetailsClick(runName);
             });
         } else {
             hydraBtn.style.display = 'none'; // Hide button
@@ -546,15 +546,15 @@ function populateRunSelector() {
 
 
 // --- NEW: Function to update only Hydra buttons ---
-function updateHydraButtonsInSelector() {
+function updateDetailsButtonsInSelector() {
     const runItems = runSelectorContainer.querySelectorAll('.run-checkbox-item');
     runItems.forEach(item => {
         const checkbox = item.querySelector('input[type="checkbox"]');
         const hydraBtn = item.querySelector('.hydra-overrides-btn');
         if (checkbox && hydraBtn) {
             const runName = checkbox.value;
-            const runInfo = runInfoMap[runName] || { has_overrides: false };
-            const shouldShow = runInfo.has_overrides;
+            const runInfo = runInfoMap[runName] || { has_overrides: false, has_hparams: false };
+            const shouldShow = runInfo.has_overrides || runInfo.has_hparams;
 
             if (shouldShow && hydraBtn.style.display === 'none') {
                 hydraBtn.style.display = 'flex';
@@ -562,7 +562,7 @@ function updateHydraButtonsInSelector() {
                 if (!hydraBtn.dataset.listenerAttached) {
                      hydraBtn.addEventListener('click', (e) => {
                          e.stopPropagation();
-                         handleViewOverridesClick(runName);
+                         handleViewDetailsClick(runName);
                      });
                      hydraBtn.dataset.listenerAttached = 'true'; // Mark listener as attached
                 }
@@ -599,60 +599,140 @@ function setupBulkActions() {
 }
 
 // --- Hydra Modal Logic ---
-async function handleViewOverridesClick(runName) {
+async function handleViewDetailsClick(runName) {
     if (!hydraModal || !hydraModalRunName || !hydraModalContent) {
-        console.error("Hydra modal elements not found.");
-        displayError("Cannot display overrides: Modal elements missing.");
+        console.error("Details modal elements not found.");
+        displayError("Cannot display details: Modal elements missing.");
         return;
     }
 
-    console.log(`Requesting overrides for: ${runName}`);
+    console.log(`Requesting details for run: ${runName}`);
     hydraModalRunName.textContent = runName; // Show run name immediately
-    hydraModalContent.textContent = 'Loading...'; // Show loading state
-    hydraModalContent.style.color = 'var(--text-secondary)'; // Use secondary color for loading text
+    hydraModalContent.innerHTML = `<p style="color: var(--text-secondary);">Loading details...</p>`; // Initial loading state
     hydraModal.style.display = 'flex'; // Show the modal (using flex as defined in CSS)
 
-    try {
-        // Check frontend cache first (though backend stores it, this is a fallback/future optimization)
-        let overridesText = frontendDataCache[runName]?.hydra_overrides;
+    // Ensure cache structure for the run exists
+    if (!frontendDataCache[runName]) {
+        frontendDataCache[runName] = {};
+    }
 
-        if (overridesText === undefined) {
-            const response = await fetch(`${API_BASE_URL}/api/overrides?run=${encodeURIComponent(runName)}`);
-            if (!response.ok) {
-                let errorMsg = `Failed to fetch overrides: ${response.status} ${response.statusText}`;
-                 if (response.status === 404) {
-                     errorMsg = `No Hydra overrides found for run '${runName}'.`;
-                     if (!frontendDataCache[runName]) {
-                         frontendDataCache[runName] = {};
-                     }
-                     frontendDataCache[runName].hydra_overrides = null; // Use null to indicate "checked, none found"
-                 } else {
-                     try { const errorData = await response.json(); if (errorData && errorData.error) { errorMsg += ` - ${errorData.error}`; } } catch(e) {}
-                 }
-                throw new Error(errorMsg);
+    let hydraOverridesHtml = '';
+    let tbHParamsHtml = '';
+    let errors = [];
+
+    const runInfo = runInfoMap[runName] || { has_overrides: false, has_hparams: false };
+
+    // --- Fetch Hydra Overrides ---
+    if (runInfo.has_overrides) {
+        try {
+            let overridesText = frontendDataCache[runName].hydra_overrides;
+            if (overridesText === undefined) { // Not cached or previously failed with undefined
+                const response = await fetch(`${API_BASE_URL}/api/overrides?run=${encodeURIComponent(runName)}`);
+                if (!response.ok) {
+                    let errorMsg = `Failed to fetch Hydra overrides: ${response.status} ${response.statusText}`;
+                    if (response.status === 404) {
+                        errorMsg = `No Hydra overrides found for run '${runName}'.`;
+                        frontendDataCache[runName].hydra_overrides = null; // Cache as null (checked, none found)
+                    } else {
+                        try { const errorData = await response.json(); if (errorData && errorData.error) { errorMsg += ` - ${errorData.error}`; } } catch(e) {}
+                    }
+                    throw new Error(errorMsg);
+                }
+                overridesText = await response.text();
+                frontendDataCache[runName].hydra_overrides = overridesText; // Cache successful fetch
             }
-            overridesText = await response.text();
 
-            if (!frontendDataCache[runName]) {
-                 frontendDataCache[runName] = {}; // Initialize run entry if needed
+            if (overridesText === null) { // Explicitly null means checked and none found
+                hydraOverridesHtml = `<p style="color: var(--text-secondary);">No Hydra overrides found.</p>`;
+            } else if (overridesText) {
+                hydraOverridesHtml = `<pre>${escapeHtml(overridesText)}</pre>`;
             }
-            // Store fetched text, DON'T initialize scalars here
-            frontendDataCache[runName].hydra_overrides = overridesText;
-
-        } else if (overridesText === null) {
-             // This means we previously checked and found no overrides
-             throw new Error(`No Hydra overrides found for run '${runName}'.`);
+        } catch (error) {
+            console.error(`Error fetching/displaying Hydra overrides for ${runName}:`, error);
+            errors.push(`Hydra Overrides: ${error.message || 'Could not load.'}`);
+            hydraOverridesHtml = `<p style="color: var(--error-color);">Error loading Hydra overrides: ${escapeHtml(error.message)}</p>`;
         }
-        // If overridesText is already a string, we use the cached version directly
+    } else {
+        hydraOverridesHtml = `<p style="color: var(--text-secondary);">Hydra overrides not available for this run.</p>`;
+    }
 
-        // Display the overrides
-        hydraModalContent.textContent = overridesText;
-        hydraModalContent.style.color = 'var(--text-primary)'; // Reset color
+    // --- Fetch TensorBoard Hyperparameters ---
+    if (runInfo.has_hparams) {
+        try {
+            let hparamsData = frontendDataCache[runName].hparams;
+            if (hparamsData === undefined) {
+                const response = await fetch(`${API_BASE_URL}/api/hparams?run=${encodeURIComponent(runName)}`);
+                if (!response.ok) {
+                    let errorMsg = `Failed to fetch TensorBoard HParams: ${response.status} ${response.statusText}`;
+                     if (response.status === 404) {
+                        errorMsg = `No TensorBoard HParams found for run '${runName}'.`;
+                        frontendDataCache[runName].hparams = null; // Cache as null
+                    } else {
+                        try { const errorData = await response.json(); if (errorData && errorData.error) { errorMsg += ` - ${errorData.error}`; } } catch(e) {}
+                    }
+                    throw new Error(errorMsg);
+                }
+                hparamsData = await response.json();
+                frontendDataCache[runName].hparams = hparamsData; // Cache successful fetch
+            }
 
+            if (hparamsData === null) { // Explicitly null means checked and none found
+                tbHParamsHtml = `<p style="color: var(--text-secondary);">No TensorBoard HParams found.</p>`;
+            } else if (hparamsData && hparamsData.hparam_dict && Object.keys(hparamsData.hparam_dict).length > 0) {
+                let content = '';
+                for (const key in hparamsData.hparam_dict) {
+                    content += `${escapeHtml(key)}: ${escapeHtml(String(hparamsData.hparam_dict[key]))}\n`;
+                }
+                tbHParamsHtml = `<pre>${content}</pre>`;
+            } else {
+                tbHParamsHtml = `<p style="color: var(--text-secondary);">No TensorBoard HParams data available.</p>`;
+            }
+        } catch (error) {
+            console.error(`Error fetching/displaying TensorBoard HParams for ${runName}:`, error);
+            errors.push(`TensorBoard HParams: ${error.message || 'Could not load.'}`);
+            tbHParamsHtml = `<p style="color: var(--error-color);">Error loading TensorBoard HParams: ${escapeHtml(error.message)}</p>`;
+        }
+    } else {
+        tbHParamsHtml = `<p style="color: var(--text-secondary);">TensorBoard HParams not available for this run.</p>`;
+    }
+
+    // --- Update Modal Content ---
+    let finalModalContent = '';
+    if (runInfo.has_overrides) {
+        finalModalContent += `
+            <div class="modal-section">
+                <h4>Hydra Overrides</h4>
+                ${hydraOverridesHtml}
+            </div>`;
+    }
+    if (runInfo.has_hparams) {
+         finalModalContent += `
+            <div class="modal-section">
+                <h4>TensorBoard Hyperparameters</h4>
+                ${tbHParamsHtml}
+            </div>`;
+    }
+
+    if (!runInfo.has_overrides && !runInfo.has_hparams) {
+        finalModalContent = `<p style="color: var(--text-secondary);">No details (Hydra Overrides or TensorBoard HParams) available for this run.</p>`;
+    }
+
+    hydraModalContent.innerHTML = finalModalContent;
+    hydraModalContent.style.color = 'var(--text-primary)'; // Reset color after loading
+}
+
+// Helper to escape HTML for display in <pre> or other elements
+function escapeHtml(unsafe) {
+    if (unsafe === null || unsafe === undefined) return '';
+    try {
+        return String(unsafe)
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
     } catch (error) {
-        console.error(`Error fetching/displaying overrides for ${runName}:`, error);
-        hydraModalContent.textContent = `Error: ${error.message || 'Could not load overrides.'}`;
-        hydraModalContent.style.color = 'var(--error-color)'; // Use error color
+        return '[Error escaping value]';
     }
 }
 

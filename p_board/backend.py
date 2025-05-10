@@ -14,7 +14,13 @@ from pathlib import Path # For easier path manipulation
 import atexit # To handle thread shutdown
 
 # --- Globals ---
-RUN_DATA_CACHE = {} # Now stores {'run_name': {'scalars': {...}, 'hydra_overrides': '...' | None}}
+RUN_DATA_CACHE = {} # Now stores {
+                    #   'run_name': {
+                    #     'scalars': {...},
+                    #     'hydra_overrides': '...' | None,
+                    #     'hparams': {'hparam_dict': {...}, 'metric_dict': {...}} | None
+                    #   }
+                    # }
 CACHE_LOAD_TIME = 0
 LOG_ROOT_DIR = None
 HYDRA_MULTIRUN_DIR = None # Store the path to hydra multirun
@@ -188,182 +194,198 @@ def preload_all_runs_unified():
     if HYDRA_MULTIRUN_DIR:
         app.logger.info(f"--- Background Refresh: Will attempt to find Hydra overrides in: {HYDRA_MULTIRUN_DIR} ---")
 
-    temp_cache = {} # Build data into a temporary dictionary
-
     if not LOG_ROOT_DIR or not os.path.isdir(LOG_ROOT_DIR):
         app.logger.error(f"Background Refresh: Invalid log directory: {LOG_ROOT_DIR}")
-        # Don't update the main cache if logdir is invalid
         load_duration = time.time() - start_time
         app.logger.info(f"--- Background Refresh: Skipped (invalid logdir). Duration: {load_duration:.2f}s ---")
         return
 
+    temp_cache = {} # Build data into a temporary dictionary
+
     try:
-        # --- Core Change: Read all runs at once ---
-        app.logger.info(f"Background Refresh: Reading all runs in {LOG_ROOT_DIR} using SummaryReader...")
+        # 1. Initialize SummaryReader
+        app.logger.info(f"Background Refresh: Initializing SummaryReader for {LOG_ROOT_DIR}...")
         reader = SummaryReader(
             LOG_ROOT_DIR,
-            pivot=False,
+            pivot=False, # Keep pivot=False for detailed scalar data
             extra_columns={"wall_time", "dir_name"},
-            event_types={"scalars"},
+            event_types={"scalars", "hparams"}, # For reader.scalars and reader.hparams
         )
-        df_all = reader.scalars
-        read_duration = time.time() - start_time
-        app.logger.info(f"Background Refresh: SummaryReader finished in {read_duration:.2f}s.")
+        df_scalars = reader.scalars
+        df_hparams = reader.hparams # Accesses hparams data
+        tbparse_read_duration = time.time() - start_time
+        app.logger.info(f"Background Refresh: tbparse read scalars/hparams in {tbparse_read_duration:.2f}s.")
 
-        if df_all is None or df_all.empty:
-            app.logger.warning(f"Background Refresh: No scalar data found in any runs within {LOG_ROOT_DIR}")
-            # Still check for overrides for directories that *might* be runs even if no scalars
-            # For simplicity, only process dirs found by tbparse or existing dirs if hydra is enabled
-            run_dirs_to_check_overrides = set()
-            if HYDRA_MULTIRUN_DIR:
-                 try:
-                     # Get all immediate subdirectories of LOG_ROOT_DIR
-                     run_dirs_to_check_overrides = {d.name for d in Path(LOG_ROOT_DIR).iterdir() if d.is_dir()}
-                     app.logger.info(f"Background Refresh: No scalars, but checking {len(run_dirs_to_check_overrides)} dirs for overrides due to --hydra-multirun-dir.")
-                 except Exception as e_dir:
-                     app.logger.error(f"Background Refresh: Error listing directories in {LOG_ROOT_DIR} for override check: {e_dir}")
+        # 2. Collect all unique base run directory names
+        all_base_run_names = set()
+        if df_scalars is not None and not df_scalars.empty and 'dir_name' in df_scalars:
+            all_base_run_names.update(df_scalars['dir_name'].unique())
 
-            if not run_dirs_to_check_overrides:
-                 # No scalars and no dirs to check for overrides
-                 RUN_DATA_CACHE = {} # Atomically clear the cache
-                 CACHE_LOAD_TIME = time.time() - start_time
-                 app.logger.info(f"--- Background Refresh: Finished (no data/overrides found). Cache cleared. Duration: {CACHE_LOAD_TIME:.2f}s ---")
-                 return
-            else:
-                 # Proceed to check overrides even without scalar data
-                 df_all = pd.DataFrame(columns=["step", "value", "wall_time", "tag", "dir_name"]) # Empty df for structure
-                 # Add the directories found to the processing list
-                 for dir_name in run_dirs_to_check_overrides:
-                      temp_cache[dir_name] = {
-                          'scalars': {}, # No scalars found
-                          'hydra_overrides': None
-                      }
-                 app.logger.info("Background Refresh: Proceeding to check for overrides only.")
+        hparam_base_run_map = defaultdict(list) # Maps base_run_name to list of hparam rows
+        if df_hparams is not None and not df_hparams.empty and 'dir_name' in df_hparams:
+            # Sort by wall_time to pick the earliest hparam entry if multiple exist for the same base run
+            if 'wall_time' in df_hparams.columns:
+                df_hparams = df_hparams.sort_values('wall_time')
+            
+            for index, row in df_hparams.iterrows():
+                hparam_event_dir_name = row['dir_name'] # e.g., "actual_run_name/hparam_timestamp"
+                # Derive base run name (e.g., "actual_run_name")
+                base_run_name = Path(hparam_event_dir_name).parts[0]
+                all_base_run_names.add(base_run_name)
+                hparam_base_run_map[base_run_name].append(row)
 
+        # 3. If no runs from TB, but Hydra dir is set, check LOG_ROOT_DIR subdirs
+        if not all_base_run_names and HYDRA_MULTIRUN_DIR:
+            app.logger.info("Background Refresh: No TensorBoard data found. Checking LOG_ROOT_DIR subdirectories for potential Hydra overrides.")
+            try:
+                for item in Path(LOG_ROOT_DIR).iterdir():
+                    if item.is_dir():
+                        all_base_run_names.add(item.name)
+            except Exception as e_dir_list:
+                app.logger.error(f"Background Refresh: Error listing directories in {LOG_ROOT_DIR} for override check: {e_dir_list}")
 
-        else: # df_all is not empty
-            app.logger.info(f"Background Refresh: Read {len(df_all)} total scalar points. Processing...")
+        if not all_base_run_names:
+            app.logger.info("Background Refresh: No runs found from TensorBoard data or filesystem scan. Clearing cache.")
+            RUN_DATA_CACHE = {}
+            CACHE_LOAD_TIME = time.time() - start_time
+            app.logger.info(f"--- Background Refresh: Finished (no runs found). Cache cleared. Duration: {CACHE_LOAD_TIME:.2f}s ---")
+            return
 
-            # --- Data Cleaning (on the combined DataFrame) ---
+        # 4. Initialize temp_cache for all identified base run names
+        for run_name in all_base_run_names:
+            temp_cache[run_name] = {
+                'scalars': {},
+                'hydra_overrides': None,
+                'hparams': None  # Initialize hparams entry
+            }
+        app.logger.info(f"Background Refresh: Identified {len(all_base_run_names)} potential runs to process.")
+
+        # 5. Process scalars
+        if df_scalars is not None and not df_scalars.empty:
+            app.logger.info(f"Background Refresh: Processing {len(df_scalars)} scalar data points...")
             step_col, value_col, time_col, tag_col, run_col = ("step", "value", "wall_time", "tag", "dir_name")
             required_cols = {step_col, value_col, time_col, tag_col, run_col}
-            if not required_cols.issubset(df_all.columns):
-                app.logger.error(f"Background Refresh: Missing required columns in combined DataFrame. Found: {df_all.columns}, Required: {required_cols}")
-                if "dir_name" not in df_all.columns:
-                     app.logger.error("Background Refresh: Crucially, 'dir_name' column is missing! Cannot process runs.")
-                     # Don't update cache if dir_name is missing
-                     load_duration = time.time() - start_time
-                     app.logger.info(f"--- Background Refresh: Failed (missing 'dir_name'). Duration: {load_duration:.2f}s ---")
-                     return
-                missing = required_cols - set(df_all.columns)
+            if not required_cols.issubset(df_scalars.columns):
+                app.logger.error(f"Background Refresh: Missing required columns in scalar DataFrame. Found: {df_scalars.columns}, Required: {required_cols}")
+                # Handle critical missing 'dir_name' specifically if necessary, though tbparse should provide it.
+                missing = required_cols - set(df_scalars.columns)
                 app.logger.warning(f"Background Refresh: Missing optional columns: {missing}. Proceeding.")
-                required_cols = set(df_all.columns).intersection(required_cols)
+                required_cols = set(df_scalars.columns).intersection(required_cols)
 
-            df_all = df_all[list(required_cols)].copy()
+            df_scalars_cleaned = df_scalars[list(required_cols)].copy()
             for col in [step_col, value_col, time_col]:
-                 if col in df_all.columns:
-                     df_all[col] = pd.to_numeric(df_all[col], errors='coerce')
-            initial_rows = len(df_all)
-            cols_to_check_na = [col for col in [step_col, value_col, time_col] if col in df_all.columns]
-            if cols_to_check_na: df_all.dropna(subset=cols_to_check_na, inplace=True)
-            if value_col in df_all.columns: df_all = df_all[~df_all[value_col].isin([float("inf"), -float("inf")])]
-            dropped_rows = initial_rows - len(df_all)
+                 if col in df_scalars_cleaned.columns:
+                     df_scalars_cleaned[col] = pd.to_numeric(df_scalars_cleaned[col], errors='coerce')
+            initial_rows = len(df_scalars_cleaned)
+            cols_to_check_na = [col for col in [step_col, value_col, time_col] if col in df_scalars_cleaned.columns]
+            if cols_to_check_na: df_scalars_cleaned.dropna(subset=cols_to_check_na, inplace=True)
+            if value_col in df_scalars_cleaned.columns: df_scalars_cleaned = df_scalars_cleaned[~df_scalars_cleaned[value_col].isin([float("inf"), -float("inf")])]
+            dropped_rows = initial_rows - len(df_scalars_cleaned)
             if dropped_rows > 0: app.logger.debug(f"Background Refresh: Dropped {dropped_rows} rows with NaN/Inf values.")
 
-            if df_all.empty:
+            if df_scalars_cleaned.empty:
                 app.logger.warning(f"Background Refresh: No valid scalar data remaining after cleaning.")
-                # Still check for overrides if hydra dir is set
-                if not HYDRA_MULTIRUN_DIR:
-                    RUN_DATA_CACHE = {} # Atomically clear cache
-                    CACHE_LOAD_TIME = time.time() - start_time
-                    app.logger.info(f"--- Background Refresh: Finished (no valid data). Cache cleared. Duration: {CACHE_LOAD_TIME:.2f}s ---")
-                    return
-                else:
-                    # Get run names from original reader output before cleaning
-                    try:
-                        all_run_names = set(reader.scalars['dir_name'].unique()) if reader.scalars is not None and 'dir_name' in reader.scalars else set()
-                        app.logger.info(f"Background Refresh: No valid scalars, but checking {len(all_run_names)} dirs for overrides.")
-                        for run_name in all_run_names:
-                             temp_cache[run_name] = {'scalars': {}, 'hydra_overrides': None}
-                    except Exception as e:
-                         app.logger.error(f"Background Refresh: Error getting run names for override check: {e}")
-                         RUN_DATA_CACHE = {} # Clear cache on error
-                         CACHE_LOAD_TIME = time.time() - start_time
-                         app.logger.info(f"--- Background Refresh: Failed (error getting run names). Cache cleared. Duration: {CACHE_LOAD_TIME:.2f}s ---")
-                         return
+            else: # df_scalars_cleaned has valid data
+                if step_col in df_scalars_cleaned.columns: df_scalars_cleaned[step_col] = df_scalars_cleaned[step_col].astype(int)
+                if time_col in df_scalars_cleaned.columns: df_scalars_cleaned[time_col] = df_scalars_cleaned[time_col].astype(float)
+                if run_col in df_scalars_cleaned.columns: df_scalars_cleaned[run_col] = df_scalars_cleaned[run_col].astype(str)
 
-
-            else: # df_all has valid data after cleaning
-                if step_col in df_all.columns: df_all[step_col] = df_all[step_col].astype(int)
-                if time_col in df_all.columns: df_all[time_col] = df_all[time_col].astype(float)
-                if run_col in df_all.columns: df_all[run_col] = df_all[run_col].astype(str)
-
-                # --- Restructure data into the temporary cache ---
-                app.logger.info("Background Refresh: Restructuring data for cache...")
-                grouped_by_run = df_all.groupby(run_col)
-
+                app.logger.info("Background Refresh: Restructuring scalar data for cache...")
+                grouped_by_run = df_scalars_cleaned.groupby(run_col)
                 for run_name, run_df in grouped_by_run:
-                    temp_cache[run_name] = {
-                        'scalars': defaultdict(lambda: {"steps": [], "values": [], "wall_times": []}),
-                        'hydra_overrides': None
-                    }
-                    run_scalar_data = temp_cache[run_name]['scalars']
-                    grouped_by_tag = run_df.groupby(tag_col)
-                    for tag, tag_df in grouped_by_tag:
-                        tag_df = tag_df.sort_values(by=step_col)
-                        if not tag_df.empty:
-                            if step_col in tag_df: run_scalar_data[tag]["steps"] = tag_df[step_col].to_list()
-                            if value_col in tag_df: run_scalar_data[tag]["values"] = tag_df[value_col].to_list()
-                            if time_col in tag_df: run_scalar_data[tag]["wall_times"] = tag_df[time_col].to_list()
-                    # Convert defaultdict back to dict
-                    temp_cache[run_name]['scalars'] = dict(run_scalar_data)
+                    if run_name in temp_cache:
+                        # Ensure 'scalars' key is a defaultdict for this run
+                        temp_cache[run_name]['scalars'] = defaultdict(lambda: {"steps": [], "values": [], "wall_times": []})
+                        run_scalar_data_for_current_run = temp_cache[run_name]['scalars']
+                        grouped_by_tag = run_df.groupby(tag_col)
+                        for tag, tag_df in grouped_by_tag:
+                            tag_df_sorted = tag_df.sort_values(by=step_col) if step_col in tag_df.columns else tag_df
+                            if not tag_df_sorted.empty:
+                                if step_col in tag_df_sorted: run_scalar_data_for_current_run[tag]["steps"] = tag_df_sorted[step_col].to_list()
+                                if value_col in tag_df_sorted: run_scalar_data_for_current_run[tag]["values"] = tag_df_sorted[value_col].to_list()
+                                if time_col in tag_df_sorted: run_scalar_data_for_current_run[tag]["wall_times"] = tag_df_sorted[time_col].to_list()
+                        temp_cache[run_name]['scalars'] = dict(run_scalar_data_for_current_run) # Convert back to dict
+                    else:
+                        app.logger.warning(f"Background Refresh: Scalar data found for run '{run_name}' which was not in the initial list of runs. Skipping.")
+        else:
+            app.logger.info("Background Refresh: No scalar data found by tbparse.")
 
-        # --- Find Hydra Overrides for all runs in temp_cache ---
-        processed_runs_count = 0
-        runs_with_data_or_overrides = set()
+        # 6. Process HParams (using hparam_base_run_map)
+        if hparam_base_run_map:
+            app.logger.info(f"Background Refresh: Processing TensorBoard HParams for {len(hparam_base_run_map)} base runs...")
+            for base_run_name, hparam_rows_for_run in hparam_base_run_map.items():
+                if base_run_name in temp_cache and temp_cache[base_run_name]['hparams'] is None and hparam_rows_for_run:
+                    hparam_dict_to_store = {}
+                    metric_dict_to_store = {} # Reflects metric_dict={} in add_hparams call
+
+                    processed_an_entry = False
+                    example_dir_name_for_log = "N/A"
+                    if hparam_rows_for_run:
+                         example_dir_name_for_log = hparam_rows_for_run[0].get('dir_name', "N/A")
+
+                    for hparam_entry_row in hparam_rows_for_run: # hparam_entry_row is a pandas Series
+                        tag = hparam_entry_row.get('tag')
+                        value = hparam_entry_row.get('value')
+
+                        if tag is not None:
+                            hparam_dict_to_store[tag] = value
+                            processed_an_entry = True
+
+                    if not processed_an_entry and hparam_rows_for_run:
+                        app.logger.warning(
+                            f"Background Refresh: Hparam data from tbparse for run '{base_run_name}' "
+                            f"(from event file dir like '{example_dir_name_for_log}') did not yield "
+                            f"extractable tag/value pairs from its rows, or was structured unexpectedly. "
+                            f"Number of hparam event rows: {len(hparam_rows_for_run)}."
+                        )
+
+                    temp_cache[base_run_name]['hparams'] = {
+                        'hparam_dict': hparam_dict_to_store,
+                        'metric_dict': metric_dict_to_store
+                    }
+                    app.logger.debug(f"Background Refresh: Stored/updated TensorBoard hparams for run '{base_run_name}' from {len(hparam_rows_for_run)} event entries. HParams count: {len(hparam_dict_to_store)}, Metrics count: {len(metric_dict_to_store)}.")
+        else:
+            app.logger.info("Background Refresh: No TensorBoard hparam data found by tbparse.")
+
+        # 7. Find Hydra Overrides for all runs in temp_cache
         if HYDRA_MULTIRUN_DIR:
-            app.logger.info(f"Background Refresh: Checking for Hydra overrides for {len(temp_cache)} potential runs...")
+            app.logger.info(f"Background Refresh: Checking for Hydra overrides for {len(temp_cache)} runs...")
             for run_name in list(temp_cache.keys()): # Iterate over keys list for safe modification
                 overrides_content = find_hydra_overrides(run_name, HYDRA_MULTIRUN_DIR, LOG_ROOT_DIR)
                 if overrides_content:
                     temp_cache[run_name]['hydra_overrides'] = overrides_content
-                    runs_with_data_or_overrides.add(run_name)
                     app.logger.debug(f"Background Refresh: Stored overrides for run '{run_name}'.")
-                # Check if the run has scalar data
-                if temp_cache[run_name].get('scalars'):
-                    runs_with_data_or_overrides.add(run_name)
 
-            # Filter temp_cache: keep only runs with data or overrides
-            final_temp_cache = {
-                run: data for run, data in temp_cache.items()
-                if run in runs_with_data_or_overrides
-            }
-            removed_count = len(temp_cache) - len(final_temp_cache)
-            if removed_count > 0:
-                app.logger.info(f"Background Refresh: Removed {removed_count} runs from cache that had neither scalar data nor overrides.")
-            temp_cache = final_temp_cache # Use the filtered cache
-            processed_runs_count = len(temp_cache)
+        # 8. Filter temp_cache: keep only runs with scalars, overrides, or hparams
+        final_temp_cache = {}
+        for run_name, data_dict in temp_cache.items():
+            has_scalars = bool(data_dict.get('scalars'))
+            has_overrides = bool(data_dict.get('hydra_overrides'))
+            has_hparams = bool(data_dict.get('hparams'))
+            if has_scalars or has_overrides or has_hparams:
+                final_temp_cache[run_name] = data_dict
+        
+        removed_count = len(temp_cache) - len(final_temp_cache)
+        if removed_count > 0:
+            app.logger.info(f"Background Refresh: Removed {removed_count} runs from cache that had no scalar data, overrides, or hparams.")
+        
+        temp_cache = final_temp_cache # Use the filtered cache
+        processed_runs_count = len(temp_cache)
 
-        else: # No hydra dir, count runs with scalar data
-             processed_runs_count = len(temp_cache)
-
-
-        # --- Atomically update the global cache ---
+        # 9. Atomically update the global cache
         RUN_DATA_CACHE = temp_cache
         CACHE_LOAD_TIME = time.time() - start_time
         app.logger.info(
             f"--- Background Refresh: Finished in {CACHE_LOAD_TIME:.2f}s. "
-            f"Processed data/overrides for {processed_runs_count} runs into cache. ---"
+            f"Processed data for {processed_runs_count} runs into cache. ---"
         )
 
-    except ImportError as e:
-        app.logger.error(f"Background Refresh: ImportError during tbparse read: {e}. Is TensorFlow installed?", exc_info=True)
-        # Don't update cache on error
+    except ImportError as e: # Specific to tbparse/TensorFlow
+        app.logger.error(f"Background Refresh: ImportError during tbparse read: {e}. Is TensorFlow (or tbparse's backend) installed correctly?", exc_info=True)
         load_duration = time.time() - start_time
         app.logger.info(f"--- Background Refresh: Failed (ImportError). Duration: {load_duration:.2f}s ---")
     except Exception as e:
         app.logger.error(f"Background Refresh: Error during unified preloading: {e}", exc_info=True)
-        # Don't update cache on error
         load_duration = time.time() - start_time
         app.logger.info(f"--- Background Refresh: Failed (Exception). Duration: {load_duration:.2f}s ---")
 
@@ -375,8 +397,8 @@ def background_refresh_task():
     while not stop_event.is_set():
         try:
             preload_all_runs_unified()
-        except Exception as e:
-            app.logger.error(f"Exception in background refresh task: {e}", exc_info=True)
+        except Exception as e: # Catch broad exceptions here to keep the thread alive
+            app.logger.error(f"Exception in background refresh task loop: {e}", exc_info=True)
         # Wait for the interval or until the stop event is set
         stop_event.wait(REFRESH_INTERVAL_SECONDS)
     app.logger.info("Background refresh thread stopped.")
@@ -396,9 +418,9 @@ def stop_background_refresh():
     if background_thread and background_thread.is_alive():
         app.logger.info("Signaling background refresh thread to stop...")
         stop_event.set()
-        background_thread.join(timeout=5) # Wait briefly for thread to finish
+        background_thread.join(timeout=10) # Increased timeout slightly
         if background_thread.is_alive():
-            app.logger.warning("Background refresh thread did not stop gracefully.")
+            app.logger.warning("Background refresh thread did not stop gracefully after 10s.")
         else:
             app.logger.info("Background refresh thread joined.")
         background_thread = None
@@ -412,26 +434,44 @@ def _get_runs_info_from_cache(cache_to_inspect):
          run_entry = cache_to_inspect.get(run_name, {})
          available_runs_info.append({
              'name': run_name,
-             'has_overrides': bool(run_entry.get('hydra_overrides'))
+             'has_overrides': bool(run_entry.get('hydra_overrides')),
+             'has_hparams': bool(run_entry.get('hparams')) # New field
          })
     return available_runs_info
 
 @app.route("/api/runs")
 def get_runs():
     app.logger.debug(f"Request received for /api/runs")
-    current_cache_snapshot = RUN_DATA_CACHE.copy()
+    current_cache_snapshot = RUN_DATA_CACHE.copy() # Shallow copy for safe iteration
     available_runs_info = _get_runs_info_from_cache(current_cache_snapshot)
-    app.logger.debug(f"Returning {len(available_runs_info)} available runs from cache with override status.")
+    app.logger.debug(f"Returning {len(available_runs_info)} available runs from cache with override and hparam status.")
     return jsonify(available_runs_info)
 
+# New: Endpoint to get TensorBoard hparams for a specific run
+@app.route("/api/hparams")
+def get_hparams():
+    run_name = request.args.get("run")
+    if not run_name:
+        return jsonify({"error": "No run specified"}), 400
+
+    app.logger.debug(f"Request: /api/hparams for run: {run_name}")
+
+    # Access cache safely (RUN_DATA_CACHE is thread-safe for reads due to GIL and atomic replacement)
+    run_data = RUN_DATA_CACHE.get(run_name)
+    if not run_data:
+        app.logger.warning(f"Run '{run_name}' not found in current cache for hparams request.")
+        return jsonify({"error": f"Run '{run_name}' not found in cache"}), 404
+
+    hparams_content = run_data.get('hparams')
+    if hparams_content is None:
+        app.logger.debug(f"No TensorBoard hparams found in cache for run '{run_name}'.")
+        return jsonify({"error": f"No TensorBoard hparams found for run '{run_name}'"}), 404
+
+    app.logger.debug(f"Returning TensorBoard hparams for run '{run_name}'.")
+    return jsonify(hparams_content)
 
 
-
-
-
-
-
-# New: Endpoint to get hydra overrides for a specific run
+# Endpoint to get hydra overrides for a specific run
 @app.route("/api/overrides")
 def get_overrides():
     run_name = request.args.get("run")
@@ -440,11 +480,8 @@ def get_overrides():
 
     app.logger.debug(f"Request: /api/overrides for run: {run_name}")
 
-    # Access cache safely
     run_data = RUN_DATA_CACHE.get(run_name)
     if not run_data:
-        # Check if the run *might* exist on disk but wasn't cached (e.g., error during load)
-        # For simplicity, we only report based on the current cache.
         app.logger.warning(f"Run '{run_name}' not found in current cache for overrides request.")
         return jsonify({"error": f"Run '{run_name}' not found in cache"}), 404
 
@@ -497,7 +534,7 @@ def get_data():
     metrics_collected = set()
 
     # Access cache safely
-    current_cache_snapshot = RUN_DATA_CACHE
+    current_cache_snapshot = RUN_DATA_CACHE # Direct access is fine due to GIL / atomic replacement
 
     for run_name in selected_runs:
         run_cache_entry = current_cache_snapshot.get(run_name)
@@ -506,14 +543,15 @@ def get_data():
         if run_scalars_from_cache: # Check if run exists AND has scalar data
             served_run = False
             for metric_name, metric_data in run_scalars_from_cache.items():
-                if isinstance(metric_data, dict) and metric_data.get("steps"):
+                if isinstance(metric_data, dict) and metric_data.get("steps"): # Check for actual data
                     all_metrics_data[metric_name][run_name] = metric_data
                     metrics_collected.add(metric_name)
                     served_run = True
             if served_run:
                 runs_served_count += 1
             else:
-                runs_missing_or_no_scalars.append(run_name)
+                # This case means the run was in cache, 'scalars' key existed, but was empty or malformed.
+                runs_missing_or_no_scalars.append(f"{run_name} (no valid scalar entries)")
         else:
             runs_missing_or_no_scalars.append(run_name)
 
@@ -524,13 +562,11 @@ def get_data():
         f"Collected {len(metrics_collected)} distinct scalar metrics."
     )
     if runs_missing_or_no_scalars:
-        log_message += f" Runs missing or no scalars: {runs_missing_or_no_scalars}"
+        log_message += f" Runs missing or no/empty scalars: {runs_missing_or_no_scalars}"
     app.logger.info(log_message)
 
-    if not all_metrics_data and runs_served_count > 0:
-        app.logger.warning(f"No common/valid scalar data found across the successfully served runs: {selected_runs}")
-        return jsonify({})
-    elif not all_metrics_data:
+    if not all_metrics_data: # Covers cases where no runs served, or served runs had no common/valid data
+         app.logger.warning(f"No scalar data to return for selected runs: {selected_runs}")
          return jsonify({})
 
     return jsonify(dict(all_metrics_data))
@@ -549,7 +585,7 @@ def serve_static(filename):
         return "Invalid path", 400
     try:
         return send_from_directory(app.static_folder, filename)
-    except FileNotFoundError:
+    except FileNotFoundError: # More specific exception
          app.logger.warning(f"Static file not found: {filename}")
          return "File not found", 404
 
@@ -559,7 +595,7 @@ def main():
     global LOG_ROOT_DIR, HYDRA_MULTIRUN_DIR, REFRESH_INTERVAL_SECONDS
 
     parser = argparse.ArgumentParser(
-        description="p-board: A faster TensorBoard log viewer with Hydra support."
+        description="p-board: A faster TensorBoard log viewer with Hydra and HParams support."
     )
     parser.add_argument(
         "--logdir",
@@ -609,14 +645,17 @@ def main():
     if args.debug:
         logging.getLogger().setLevel(logging.DEBUG)
         app.logger.setLevel(logging.DEBUG)
+        for handler in logging.getLogger().handlers: # Ensure all handlers get debug level
+            handler.setLevel(logging.DEBUG)
         print("p-board: Debug mode enabled.")
     else:
         logging.getLogger().setLevel(logging.INFO)
         app.logger.setLevel(logging.INFO)
 
     # --- Initial Preload ---
-    # Call directly first to populate cache before server starts fully
+    print("p-board: Performing initial data load...")
     preload_all_runs_unified()
+    print(f"p-board: Initial load complete. Found {len(RUN_DATA_CACHE)} runs in cache.")
 
     # --- Start Background Refresh Thread (if interval > 0) ---
     if REFRESH_INTERVAL_SECONDS > 0:
@@ -632,7 +671,7 @@ def main():
     if not args.no_browser:
         url = f"http://{args.host}:{args.port}"
         def open_browser():
-            time.sleep(1.0)
+            time.sleep(1.0) # Give server a moment to start
             print(f"p-board: Opening browser at {url} ...")
             webbrowser.open(url)
         browser_thread = threading.Thread(target=open_browser, daemon=True)
@@ -643,7 +682,6 @@ def main():
 
     print("--- Server Ready ---")
     # Disable Flask's reloader when using our background thread or debug mode
-    # Flask's reloader can cause issues with background threads.
     use_reloader_flag = False # Generally safer to disable Flask reloader with threads
     if args.debug:
          print("p-board: Flask debug mode is ON, but Flask's auto-reloader is disabled for stability with background tasks.")
