@@ -622,10 +622,12 @@ body.resizing { /* Prevent text selection globally during resize */
     text-decoration: none;
 }
 
-#hydra-modal-content {
+/* Styles for the content within each modal section (Hydra overrides <pre> and HParams tree <div>) */
+#hydra-overrides-content,
+#tb-hparams-content-tree {
+
     flex-grow: 1; /* Take remaining space */
     overflow-y: auto; /* Allow scrolling */
-    background-color: var(--modal-content-bg); /* Use variable */
     padding: var(--spacing-md);
     border-radius: var(--border-radius);
     font-family: monospace;
@@ -637,8 +639,6 @@ body.resizing { /* Prevent text selection globally during resize */
     min-height: 100px; /* Ensure it has some height when loading */
 }
 
-
-/* ... (rest of the styles) ... */
 
 .color-swatch {
     display: inline-block;
@@ -1094,4 +1094,30 @@ body.resizing { /* Prevent text selection globally during resize */
 }
 .modal-section:last-child {
     margin-bottom: 0;
+}
+
+/* Specific to the Hydra overrides <pre> tag */
+#hydra-overrides-content {
+    background-color: var(--modal-content-bg); /* Use variable */
+    color: var(--text-primary); /* Use variable */
+}
+
+/* Wrapper for all content inside the modal (after the title) */
+#details-modal-content-wrapper {
+    flex-grow: 1;
+    overflow-y: auto; /* Allow this wrapper to scroll if sections are too tall */
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md); /* Space between sections */
+}
+
+/* HParams search input */
+#hparams-search-input {
+    width: 100%;
+    padding: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+    border: 1px solid var(--input-border);
+    border-radius: var(--border-radius);
+    background-color: var(--input-bg);
+    color: var(--text-primary);
 }

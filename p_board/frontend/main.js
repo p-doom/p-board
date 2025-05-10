@@ -15,10 +15,17 @@ const selectAllBtn = document.getElementById('select-all-runs');
 const deselectAllBtn = document.getElementById('deselect-all-runs');
 const plotTooltip = document.getElementById('plot-tooltip'); // Tooltip Element
 const metricSearchInput = document.getElementById('metric-search-input');
+
+// Modal Elements (Updated for new structure)
 const hydraModal = document.getElementById('hydra-modal');
-const hydraModalRunName = document.getElementById('hydra-modal-run-name');
-const hydraModalContent = document.getElementById('hydra-modal-content');
+const detailsModalRunName = document.getElementById('details-modal-run-name'); // Renamed
+const hydraOverridesSection = document.getElementById('hydra-overrides-section');
+const hydraOverridesContent = document.getElementById('hydra-overrides-content');
+const tbHParamsSection = document.getElementById('tb-hparams-section');
+const hParamsSearchInput = document.getElementById('hparams-search-input');
+const tbHParamsContentTree = document.getElementById('tb-hparams-content-tree');
 const hydraModalCloseBtn = hydraModal ? hydraModal.querySelector('.modal-close-btn') : null;
+
 const themeToggleBtn = document.getElementById('theme-toggle-btn');
 const themeIconSun = document.getElementById('theme-icon-sun');
 const themeIconMoon = document.getElementById('theme-icon-moon');
@@ -600,15 +607,24 @@ function setupBulkActions() {
 
 // --- Hydra Modal Logic ---
 async function handleViewDetailsClick(runName) {
-    if (!hydraModal || !hydraModalRunName || !hydraModalContent) {
+    // Check for new modal elements
+    if (!hydraModal || !detailsModalRunName || !hydraOverridesSection || !hydraOverridesContent || !tbHParamsSection || !hParamsSearchInput || !tbHParamsContentTree) {
         console.error("Details modal elements not found.");
         displayError("Cannot display details: Modal elements missing.");
         return;
     }
 
     console.log(`Requesting details for run: ${runName}`);
-    hydraModalRunName.textContent = runName; // Show run name immediately
-    hydraModalContent.innerHTML = `<p style="color: var(--text-secondary);">Loading details...</p>`; // Initial loading state
+    detailsModalRunName.textContent = runName; // Show run name immediately
+
+    // Reset content and visibility
+    hydraOverridesContent.innerHTML = `<p style="color: var(--text-secondary);">Loading...</p>`;
+    tbHParamsContentTree.innerHTML = `<p style="color: var(--text-secondary);">Loading...</p>`;
+    hParamsSearchInput.value = '';
+    hParamsSearchInput.style.display = 'none'; // Hide search initially
+    hydraOverridesSection.style.display = 'none';
+    tbHParamsSection.style.display = 'none';
+
     hydraModal.style.display = 'flex'; // Show the modal (using flex as defined in CSS)
 
     // Ensure cache structure for the run exists
@@ -616,7 +632,6 @@ async function handleViewDetailsClick(runName) {
         frontendDataCache[runName] = {};
     }
 
-    let hydraOverridesHtml = '';
     let tbHParamsHtml = '';
     let hparamsData; // Declare hparamsData in the function scope
     let errors = [];
@@ -626,6 +641,7 @@ async function handleViewDetailsClick(runName) {
     // --- Fetch Hydra Overrides ---
     if (runInfo.has_overrides) {
         try {
+            hydraOverridesSection.style.display = 'block';
             let overridesText = frontendDataCache[runName].hydra_overrides; // This let is fine as overridesText is only used in this block
             if (overridesText === undefined) { // Not cached or previously failed with undefined
                 const response = await fetch(`${API_BASE_URL}/api/overrides?run=${encodeURIComponent(runName)}`);
@@ -644,22 +660,23 @@ async function handleViewDetailsClick(runName) {
             }
 
             if (overridesText === null) { // Explicitly null means checked and none found
-                hydraOverridesHtml = `<p style="color: var(--text-secondary);">No Hydra overrides found.</p>`;
+                hydraOverridesContent.innerHTML = `<p style="color: var(--text-secondary);">No Hydra overrides found.</p>`;
             } else if (overridesText) {
-                hydraOverridesHtml = `<pre>${escapeHtml(overridesText)}</pre>`;
+                hydraOverridesContent.textContent = overridesText; // Set as text for <pre>
             }
         } catch (error) {
             console.error(`Error fetching/displaying Hydra overrides for ${runName}:`, error);
             errors.push(`Hydra Overrides: ${error.message || 'Could not load.'}`);
-            hydraOverridesHtml = `<p style="color: var(--error-color);">Error loading Hydra overrides: ${escapeHtml(error.message)}</p>`;
+            hydraOverridesContent.innerHTML = `<p style="color: var(--error-color);">Error loading Hydra overrides: ${escapeHtml(error.message)}</p>`;
         }
     } else {
-        hydraOverridesHtml = `<p style="color: var(--text-secondary);">Hydra overrides not available for this run.</p>`;
+        hydraOverridesContent.innerHTML = `<p style="color: var(--text-secondary);">Hydra overrides not available for this run.</p>`;
     }
 
     // --- Fetch TensorBoard Hyperparameters ---
     if (runInfo.has_hparams) {
         try {
+            tbHParamsSection.style.display = 'block';
             hparamsData = frontendDataCache[runName].hparams; // Assign to the higher-scoped hparamsData
             if (hparamsData === undefined) {
                 const response = await fetch(`${API_BASE_URL}/api/hparams?run=${encodeURIComponent(runName)}`);
@@ -678,70 +695,34 @@ async function handleViewDetailsClick(runName) {
             }
 
             if (hparamsData === null) { // Explicitly null means checked and none found
-                tbHParamsHtml = `<p style="color: var(--text-secondary);">No TensorBoard HParams found.</p>`;
+                tbHParamsContentTree.innerHTML = `<p style="color: var(--text-secondary);">No TensorBoard HParams found.</p>`;
             } else if (hparamsData && hparamsData.hparam_dict && Object.keys(hparamsData.hparam_dict).length > 0) {
-                // tbHParamsHtml will be handled by direct DOM manipulation later if actual data exists
+                const unflattenedHParams = unflattenObject(hparamsData.hparam_dict);
+                const treeElement = renderCollapsibleTree(unflattenedHParams);
+                tbHParamsContentTree.innerHTML = ''; // Clear loading message
+                tbHParamsContentTree.appendChild(treeElement);
+                hParamsSearchInput.style.display = 'block'; // Show search input
             } else {
-                tbHParamsHtml = `<p style="color: var(--text-secondary);">No TensorBoard HParams data available.</p>`;
+                tbHParamsContentTree.innerHTML = `<p style="color: var(--text-secondary);">No TensorBoard HParams data available.</p>`;
             }
         } catch (error) {
             console.error(`Error fetching/displaying TensorBoard HParams for ${runName}:`, error);
             errors.push(`TensorBoard HParams: ${error.message || 'Could not load.'}`);
-            tbHParamsHtml = `<p style="color: var(--error-color);">Error loading TensorBoard HParams: ${escapeHtml(error.message)}</p>`;
+            tbHParamsContentTree.innerHTML = `<p style="color: var(--error-color);">Error loading TensorBoard HParams: ${escapeHtml(error.message)}</p>`;
         }
     } else {
-        tbHParamsHtml = `<p style="color: var(--text-secondary);">TensorBoard HParams not available for this run.</p>`;
-    }
-
-    // --- Update Modal Content using DOM manipulation to preserve event listeners ---
-    hydraModalContent.innerHTML = ''; // Clear previous content
-
-    if (runInfo.has_overrides) {
-        const sectionDiv = document.createElement('div');
-        sectionDiv.className = 'modal-section';
-
-        const titleH4 = document.createElement('h4');
-        titleH4.textContent = 'Hydra Overrides';
-        sectionDiv.appendChild(titleH4);
-
-        // hydraOverridesHtml is already a string (e.g., <pre>...</pre> or <p>...</p>)
-        const contentDiv = document.createElement('div');
-        contentDiv.innerHTML = hydraOverridesHtml; // Safe for simple HTML strings without listeners
-        sectionDiv.appendChild(contentDiv);
-
-        hydraModalContent.appendChild(sectionDiv);
-    }
-
-    if (runInfo.has_hparams) {
-        const sectionDiv = document.createElement('div');
-        sectionDiv.className = 'modal-section';
-
-        const titleH4 = document.createElement('h4');
-        titleH4.textContent = 'TensorBoard Hyperparameters';
-        sectionDiv.appendChild(titleH4);
-
-        // Check if there's actual hparam data to render as a tree
-        if (hparamsData && hparamsData.hparam_dict && Object.keys(hparamsData.hparam_dict).length > 0) {
-            const unflattenedHParams = unflattenObject(hparamsData.hparam_dict);
-            const treeElement = renderCollapsibleTree(unflattenedHParams); // This is a live DOM node with listeners
-            sectionDiv.appendChild(treeElement); // Append the live node
-        } else {
-            // tbHParamsHtml contains the <p> tag for "No HParams found", "Error loading", or "No data"
-            const contentDiv = document.createElement('div');
-            contentDiv.innerHTML = tbHParamsHtml; // Safe for simple HTML strings
-            sectionDiv.appendChild(contentDiv);
-        }
-        hydraModalContent.appendChild(sectionDiv);
+        tbHParamsContentTree.innerHTML = `<p style="color: var(--text-secondary);">TensorBoard HParams not available for this run.</p>`;
     }
 
     if (!runInfo.has_overrides && !runInfo.has_hparams) { // Neither type of detail is available
+        // If both sections are hidden, show a general message in one of them, e.g., HParams section
+        tbHParamsSection.style.display = 'block'; // Make one section visible for the message
+        tbHParamsContentTree.innerHTML = ''; // Clear previous
         const p = document.createElement('p');
         p.style.color = 'var(--text-secondary)';
         p.textContent = 'No details (Hydra Overrides or TensorBoard HParams) available for this run.';
-        hydraModalContent.appendChild(p);
+        tbHParamsContentTree.appendChild(p);
     }
-
-    hydraModalContent.style.color = 'var(--text-primary)'; // Reset color after loading
 }
 
 /**
@@ -815,6 +796,70 @@ function renderCollapsibleTree(data, isRoot = true) {
     return ul;
 }
 
+// --- HParams Tree Filtering Logic ---
+function applyHParamFilter(treeRootElement, searchTerm) {
+    if (!treeRootElement) return;
+    const searchTermLower = searchTerm.toLowerCase();
+
+    // Recursive function to check visibility and apply styles
+    function filterNode(liElement) {
+        let selfMatches = false;
+        let hasVisibleChild = false;
+        const isBranch = liElement.classList.contains('collapsible-item');
+
+        // Check if the current node's text matches
+        if (isBranch) {
+            const toggle = liElement.querySelector('.collapsible-toggle');
+            if (toggle && toggle.textContent.toLowerCase().includes(searchTermLower)) {
+                selfMatches = true;
+            }
+        } else { // Leaf node
+            const keySpan = liElement.querySelector('.collapsible-key');
+            const valueSpan = liElement.querySelector('.collapsible-value');
+            let leafText = '';
+            if (keySpan) leafText += keySpan.textContent.toLowerCase();
+            if (valueSpan) leafText += ' ' + valueSpan.textContent.toLowerCase();
+            if (leafText.includes(searchTermLower)) {
+                selfMatches = true;
+            }
+        }
+
+        // If it's a branch, recursively filter its children
+        if (isBranch) {
+            const subTreeUl = liElement.querySelector('.collapsible-tree-subtree');
+            if (subTreeUl) {
+                for (const childLi of subTreeUl.children) {
+                    if (filterNode(childLi)) { // If any child is visible
+                        hasVisibleChild = true;
+                    }
+                }
+            }
+            // Manage expansion based on search term and matches
+            if (searchTermLower === '') { // No search term, respect user's expansion
+                if (subTreeUl) subTreeUl.style.display = liElement.classList.contains('expanded') ? 'block' : 'none';
+            } else { // Search is active
+                if (selfMatches || hasVisibleChild) {
+                    liElement.classList.add('expanded'); // Expand if self or child matches
+                    if (subTreeUl) subTreeUl.style.display = 'block';
+                } else {
+                    liElement.classList.remove('expanded'); // Collapse if neither self nor child matches
+                    if (subTreeUl) subTreeUl.style.display = 'none';
+                }
+            }
+        }
+        const shouldBeVisible = selfMatches || hasVisibleChild;
+        liElement.style.display = shouldBeVisible ? '' : 'none';
+        return shouldBeVisible;
+    }
+
+    // Iterate over top-level <li> elements in the tree root (which should be a <ul>)
+    if (treeRootElement.tagName === 'UL') {
+        for (const liNode of treeRootElement.children) {
+            filterNode(liNode);
+        }
+    }
+}
+
 // Helper to escape HTML for display in <pre> or other elements
 function escapeHtml(unsafe) {
     if (unsafe === null || unsafe === undefined) return '';
@@ -831,7 +876,7 @@ function escapeHtml(unsafe) {
 }
 
 function setupModalCloseHandlers() {
-    if (!hydraModal || !hydraModalCloseBtn) return;
+    if (!hydraModal || !hydraModalCloseBtn || !hParamsSearchInput) return;
 
     // Close when clicking the 'x' button
     hydraModalCloseBtn.addEventListener('click', () => {
@@ -851,6 +896,11 @@ function setupModalCloseHandlers() {
         if (event.key === 'Escape' && hydraModal.style.display !== 'none') {
             hydraModal.style.display = 'none';
         }
+    });
+
+    // HParams search input listener
+    hParamsSearchInput.addEventListener('input', () => {
+        applyHParamFilter(tbHParamsContentTree.querySelector('.collapsible-tree'), hParamsSearchInput.value);
     });
 }
 
