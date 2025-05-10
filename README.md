@@ -16,6 +16,7 @@ A blazing fast, lightweight, and dynamic web dashboard for visualizing and filte
 ## ✨ Key Features
 
 *   🚀 **High-Performance Plotting:** Utilizes `webgl-plot` for GPU-accelerated rendering of time-series data, enabling smooth visualization of large datasets.
+*   🐙 **Hydra Integration:** Automatically displays corresponding Hydra configurations for runs, supporting both single-run and multi-run (Hydra `multirun`) setups for easy correlation of metrics with experiment parameters.
 *   📂 **Metric Grouping:** Organizes related metrics into collapsible groups for a cleaner and more manageable view.
 *   🔍 **Advanced Filtering:**
     *   Instantly search for metrics by name within and across groups.
@@ -88,7 +89,7 @@ The `p-board` backend handles all the parsing and makes the data available to th
     ```bash
     p-board --logdir results/tensorboard
     ```
-    You can also specify the port (e.g., `--port 8080`) and the Hydra multirun directory (e.g., `--hydra-multirun-dir /path/to/your/hydra/multirun/`) if needed. Refer to `p_board/backend.py` for all available options (`python -m p_board.backend --help`).
+    You can also specify the port (e.g., `--port 8080`) and the Hydra single/multirun directory (e.g., `--hydra-log-dir path/to/hydra/outputs/singlerun/` or `--hydra-multirun-dir /path/to/your/hydra/multirun/`) if needed. Refer to `p_board/backend.py` for all available options (`python -m p_board.backend --help`).
     ```bash
     p-board --logdir results/tensorboard --port 8080 --hydra-multirun-dir path/to/hydra/outputs/multirun/
     ```
