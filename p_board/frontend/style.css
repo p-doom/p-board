@@ -1154,3 +1154,50 @@ body.resizing { /* Prevent text selection globally during resize */
     font-weight: normal;
     margin-left: 5px;
 }
+
+/* HParam Hover Box (similar to plot-tooltip but distinct) */
+#hparam-hover-box {
+    position: fixed; /* Changed from absolute to fixed for viewport positioning */
+    display: none;
+    background-color: var(--tooltip-bg); /* Use tooltip background */
+    color: var(--text-primary);
+    padding: var(--spacing-sm) var(--spacing-md);
+    border-radius: var(--border-radius);
+    font-size: 0.85em; /* Slightly smaller than base, similar to plot-tooltip */
+    pointer-events: none; /* Allow mouse events to pass through to elements underneath */
+    z-index: 1001; /* Above plot tooltip (1000) and modal overlay (1001) if needed, but below modal content */
+    white-space: normal; /* Allow wrapping, unlike plot-tooltip */
+    border: 1px solid var(--border-color);
+    box-shadow: var(--tooltip-shadow);
+    line-height: 1.4;
+    max-width: 350px; /* Prevent it from becoming too wide */
+}
+
+#hparam-hover-box strong { /* Title of the hover box (run name) */
+    color: var(--text-primary);
+    font-weight: 600; /* Slightly bolder */
+    display: block;
+    margin-bottom: var(--spacing-xs);
+}
+
+#hparam-hover-box ul {
+    list-style-type: none;
+    padding-left: 0;
+    margin-top: var(--spacing-xs);
+    margin-bottom: 0;
+}
+
+#hparam-hover-box li {
+    margin-bottom: 2px; /* Tighter spacing */
+    white-space: nowrap; /* Keep individual params on one line */
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#hparam-hover-box .hparam-path {
+    color: var(--text-secondary);
+    margin-right: var(--spacing-xs);
+}
+#hparam-hover-box .hparam-value {
+    color: var(--text-primary);
+    font-weight: 500;
+}
