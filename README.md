@@ -118,6 +118,7 @@ Contributions are welcome! Whether it's bug fixes, feature enhancements, or docu
 ## 🙏 Acknowledgements
 
 *   **webgl-plot:** For the powerful and interactive charting capabilities.
+*   **Gemini 2.5 Pro:** For writing every single line of code of this repository.
 *   Inspired by the need for a faster, more lightweight alternative to TensorBoard.
 
 ## 📜 License

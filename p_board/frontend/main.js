@@ -301,7 +301,8 @@ let activePlots = {}; // Structure: { metric_name: { wglp, ..., lines: { run_nam
 let debounceTimer = null;
 // Modified Cache Structure: Reflects backend change
 let frontendDataCache = {}; // Structure: { run_name: { scalars: { metric_name: { steps, values, wall_times } }, hydra_overrides: '...' | null } }
-let highlightedRunName = null; // NEW: Tracks the currently hovered run for highlighting
+let highlightedRunName = null; // Name of the run currently interactively highlighted
+let highlightSource = null; // 'plot' or 'sidebar', indicates the origin of the current highlight
 let isResizing = false;
 let isReloading = false;
 
@@ -365,30 +366,49 @@ function getRunColor(runName) {
     return runColorMap.get(runName);
 }
 
-/**
- * Handles mouse enter and leave events on run items in the selector.
- * @param {string} hoveredRunNameParam - The name of the run being hovered.
- * @param {boolean} isEntering - True if mouse is entering, false if leaving.
- */
-function handleRunHover(hoveredRunNameParam, isEntering) {
-    if (isEntering) {
-        if (highlightedRunName && highlightedRunName !== hoveredRunNameParam) {
-            // Unhighlight previously hovered run if it's different
-            applyRunHighlight(highlightedRunName, false);
-        }
-        highlightedRunName = hoveredRunNameParam;
-        applyRunHighlight(hoveredRunNameParam, true);
-    } else { // isLeaving
-        // Only unhighlight if the mouse is leaving the currently highlighted run
-        if (highlightedRunName === hoveredRunNameParam) {
-            applyRunHighlight(hoveredRunNameParam, false);
-            highlightedRunName = null;
+// --- Interactive Highlighting Logic ---
+
+function _highlightRun(runNameToHighlight, source) {
+    if (highlightedRunName && highlightedRunName !== runNameToHighlight) {
+        _unhighlightRun(); // Unhighlight whatever was previously highlighted
+    }
+
+    highlightedRunName = runNameToHighlight;
+    highlightSource = source;
+
+    applyRunHighlight(runNameToHighlight, true); // Highlight plot lines
+
+    // Highlight sidebar item
+    const checkbox = document.getElementById(`run-${runNameToHighlight}`);
+    if (checkbox) {
+        const itemDiv = checkbox.closest('.run-checkbox-item');
+        if (itemDiv) {
+            itemDiv.classList.add('run-item-interactive-highlight');
         }
     }
 }
 
+function _unhighlightRun() {
+    if (!highlightedRunName) return;
+
+    applyRunHighlight(highlightedRunName, false); // Unhighlight plot lines
+
+    // Unhighlight sidebar item
+    const checkbox = document.getElementById(`run-${highlightedRunName}`);
+    if (checkbox) {
+        const itemDiv = checkbox.closest('.run-checkbox-item');
+        if (itemDiv) {
+            itemDiv.classList.remove('run-item-interactive-highlight');
+        }
+    }
+
+    highlightedRunName = null;
+    highlightSource = null;
+}
+
+
 /**
- * Applies or removes highlight effect for a specific run's lines in all plots.
+ * Applies or removes visual highlight effect for a specific run's lines in all plots.
  * @param {string} runNameToModify - The name of the run to highlight/unhighlight.
  * @param {boolean} shouldHighlight - True to highlight, false to unhighlight.
  */
@@ -417,6 +437,20 @@ function applyRunHighlight(runNameToModify, shouldHighlight) {
     }
 }
 
+/**
+ * Handles mouse enter and leave events on run items in the sidebar.
+ * @param {string} sidebarHoveredRunName - The name of the run being hovered in the sidebar.
+ * @param {boolean} isEntering - True if mouse is entering, false if leaving.
+ */
+function handleSidebarRunHover(sidebarHoveredRunName, isEntering) {
+    if (isEntering) {
+        _highlightRun(sidebarHoveredRunName, 'sidebar');
+    } else { // isLeaving
+        if (sidebarHoveredRunName === highlightedRunName && highlightSource === 'sidebar') {
+            _unhighlightRun();
+        }
+    }
+}
 // --- Error Handling ---
 function displayError(message) {
     console.error("Error:", message);
@@ -686,8 +720,8 @@ function populateRunSelector() {
         div.appendChild(hydraBtn); // Add button to the item div
 
         // NEW: Add hover event listeners for highlighting
-        div.addEventListener('mouseenter', () => handleRunHover(runName, true));
-        div.addEventListener('mouseleave', () => handleRunHover(runName, false));
+        div.addEventListener('mouseenter', () => handleSidebarRunHover(runName, true));
+        div.addEventListener('mouseleave', () => handleSidebarRunHover(runName, false));
         runSelectorContainer.appendChild(div);
 
         // HParam hover for run list items
@@ -1630,7 +1664,13 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
               const dx = cursorCanvasX - pointCanvasX; const dy = cursorCanvasY - pointCanvasY; const screenDistSq = dx * dx + dy * dy;
               if (screenDistSq < minScreenDistanceSq) { minScreenDistanceSq = screenDistSq; closestPointInfo = { runName: runName, step: pointStep, value: pointValue, color: line.color.toString(), }; }
           }
+
           if (closestPointInfo) {
+              // Highlight run based on plot hover
+              if (closestPointInfo.runName !== highlightedRunName || highlightSource !== 'plot') {
+                  _highlightRun(closestPointInfo.runName, 'plot');
+              }
+
                const formattedValue = formatAxisValue(closestPointInfo.value, plotInfo.maxY - plotInfo.minY); const formattedStep = Number.isInteger(closestPointInfo.step) ? closestPointInfo.step.toString() : formatAxisValue(closestPointInfo.step, plotInfo.maxStep - plotInfo.minStep);
                // Use CSS variables for tooltip text colors
                tooltipElement.innerHTML = `<span style="display: inline-block; width: 10px; height: 10px; background-color: ${closestPointInfo.color}; margin-right: 5px; vertical-align: middle; border: 1px solid rgba(128,128,128,0.3); border-radius: 2px;"></span><strong style="color: var(--text-primary);">${closestPointInfo.runName}</strong><br><span style="font-size: 0.9em; color: var(--text-secondary);">Step:</span> ${formattedStep}<br><span style="font-size: 0.9em; color: var(--text-secondary);">Value:</span> ${formattedValue}`;
@@ -1639,6 +1679,11 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
                if (tooltipX < 10) tooltipX = 10; if (tooltipY < 10) tooltipY = 10;
                tooltipElement.style.left = `${tooltipX}px`; tooltipElement.style.top = `${tooltipY}px`; tooltipElement.style.display = 'block';
           } else { tooltipElement.style.display = 'none'; }
+
+          // If mouse is not over any point but was plot-highlighting, unhighlight
+          if (!closestPointInfo && highlightedRunName && highlightSource === 'plot') {
+              _unhighlightRun();
+          }
 
           // HParam Hover Box Logic for plot lines
             if (closestPointInfo) {
@@ -1674,7 +1719,10 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
          if (isDragging) { isDragging = false; canvas.style.cursor = 'grab'; }
          if (isZoomingRect) { isZoomingRect = false; zoomRectLine.visible = false; canvas.style.cursor = 'grab'; }
          tooltipElement.style.display = 'none';
-         hideHParamHoverBox();
+        hideHParamHoverBox();
+        if (highlightedRunName && highlightSource === 'plot') {
+            // _unhighlightRun(); // Potentially unhighlight if mouse leaves canvas while dragging/zooming from plot
+        }
         }); // End mouseleave
      canvas.addEventListener('wheel', (e) => {
         hideHParamHoverBox(); // Hide on scroll/zoom actions
