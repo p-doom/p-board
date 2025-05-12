@@ -109,6 +109,10 @@
     --reopen-btn-border: var(--border-color);
     --reopen-btn-color: var(--text-secondary);
     --reopen-btn-hover-color: var(--text-primary);
+    --zoom-rect-r: 0.7;
+    --zoom-rect-g: 0.7;
+    --zoom-rect-b: 0.7;
+    --zoom-rect-a: 0.6;
 }
 
 /* --- Light Theme --- */
@@ -183,6 +187,10 @@ html[data-theme="light"] {
     --reopen-btn-border: var(--border-color);
     --reopen-btn-color: var(--text-secondary);
     --reopen-btn-hover-color: var(--text-primary);
+    --zoom-rect-r: 0.0; /* Dark Blue */
+    --zoom-rect-g: 0.2;
+    --zoom-rect-b: 0.6;
+    --zoom-rect-a: 0.7; /* Less Transparent */
 }
 
 /* Basic Reset */
@@ -1120,4 +1128,11 @@ body.resizing { /* Prevent text selection globally during resize */
     border-radius: var(--border-radius);
     background-color: var(--input-bg);
     color: var(--text-primary);
+}
+
+[data-theme="dark"] {
+  --zoom-rect-r: 0.7; /* A medium-light gray for dark theme */
+  --zoom-rect-g: 0.7;
+  --zoom-rect-b: 0.7;
+  --zoom-rect-a: 0.6;
 }
