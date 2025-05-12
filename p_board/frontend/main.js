@@ -768,8 +768,24 @@ async function handleViewDetailsClick(runName) {
                 detailsModalRunName.innerHTML = `${escapeHtml(runName)} <span class="modal-subtitle">${escapeHtml(modalSubTitle)}</span>`;
 
                 // Render the tree
-                const unflattenedHParams = unflattenObject(hparamsDataForModalRun.hparam_dict);
-                const treeElement = renderCollapsibleTree(unflattenedHParams, true, differingHParamPaths);
+                let pathsToShow = new Set();
+                let initiallyShowDiffsOnly = false;
+
+                if (differingHParamPaths.size > 0) {
+                    initiallyShowDiffsOnly = true;
+                    differingHParamPaths.forEach(path => {
+                        pathsToShow.add(path); // Add the differing path itself
+                        const segments = path.split('/');
+                        let currentAncestorPath = '';
+                        for (let i = 0; i < segments.length - 1; i++) { // Iterate to create parent paths
+                            currentAncestorPath = currentAncestorPath ? `${currentAncestorPath}/${segments[i]}` : segments[i];
+                            pathsToShow.add(currentAncestorPath);
+                        }
+                    });
+                }
+
+                const unflattenedHParams = unflattenObject(hparamsDataForModalRun.hparam_dict || {});
+                const treeElement = renderCollapsibleTree(unflattenedHParams, true, differingHParamPaths, pathsToShow, initiallyShowDiffsOnly);
                 tbHParamsContentTree.innerHTML = ''; // Clear loading message
                 tbHParamsContentTree.appendChild(treeElement);
                 hParamsSearchInput.style.display = Object.keys(hparamsDataForModalRun.hparam_dict).length > 0 ? 'block' : 'none';
@@ -842,31 +858,56 @@ function unflattenObject(flatObject, separator = '/') {
  * @param {string} currentPath The current path in the object tree.
  * @returns {HTMLUListElement} The UL element representing the tree.
  */
-function renderCollapsibleTree(data, isRoot = true, differingHParamPaths = new Set(), currentPath = '') {
+function renderCollapsibleTree(data, isRoot = true, differingHParamPaths = new Set(), pathsToShow = new Set(), initiallyShowDiffsOnly = false, currentPath = '') {
     const ul = document.createElement('ul');
     ul.className = isRoot ? 'collapsible-tree' : 'collapsible-tree-subtree';
     for (const key in data) {
         if (Object.prototype.hasOwnProperty.call(data, key)) {
             const li = document.createElement('li');
             const value = data[key];
+            const fullPath = currentPath ? `${currentPath}/${key}` : key;
+
+            // Initial visibility based on diff-only mode and pathsToShow
+            if (initiallyShowDiffsOnly && !pathsToShow.has(fullPath)) {
+                li.style.display = 'none';
+            }
 
             if (typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length > 0) {
                 li.classList.add('collapsible-item');
-                const fullPath = currentPath ? `${currentPath}/${key}` : key;
                 const toggle = document.createElement('span');
                 toggle.className = 'collapsible-toggle';
                 toggle.textContent = escapeHtml(key);
-                toggle.addEventListener('click', () => {
-                    li.classList.toggle('expanded');
-                    const subTree = li.querySelector('.collapsible-tree-subtree');
-                    if (subTree) subTree.style.display = li.classList.contains('expanded') ? 'block' : 'none';
-                });
                 li.appendChild(toggle);
-                const nestedUl = renderCollapsibleTree(value, false, differingHParamPaths, fullPath);
-                nestedUl.style.display = 'none'; // Initially collapsed
+                const nestedUl = renderCollapsibleTree(value, false, differingHParamPaths, pathsToShow, initiallyShowDiffsOnly, fullPath);
+
+                if (initiallyShowDiffsOnly && pathsToShow.has(fullPath)) {
+                    // If this branch is part of a path to a diff, expand it initially
+                    li.classList.add('expanded');
+                    nestedUl.style.display = 'block';
+                } else {
+                    // Default behavior: initially collapsed (unless 'expanded' class is already there from a previous render, which it shouldn't be here)
+                    nestedUl.style.display = 'none';
+                }
                 li.appendChild(nestedUl);
+
+                toggle.addEventListener('click', () => {
+                    const subTree = li.querySelector('.collapsible-tree-subtree');
+                    if (!subTree) return;
+
+                    const isNowExpanded = li.classList.toggle('expanded');
+                    subTree.style.display = isNowExpanded ? 'block' : 'none';
+
+                    // If expanding, ensure all direct children that might have been hidden
+                    // by the initial diff-only view are made visible, but only if no search filter is active.
+                    if (isNowExpanded && !hParamsSearchInput.value) {
+                        for (const childLi of subTree.children) {
+                            if (childLi.style.display === 'none') {
+                                childLi.style.display = '';
+                            }
+                        }
+                    }
+                });
             } else {
-                const fullPath = currentPath ? `${currentPath}/${key}` : key;
                 const displayValue = Array.isArray(value) ? `[${value.map(item => escapeHtml(String(item))).join(', ')}]` : (value === null ? 'null' : escapeHtml(String(value)));
                 li.innerHTML = `<span class="collapsible-leaf"><span class="collapsible-key">${escapeHtml(key)}:</span> <span class="collapsible-value">${displayValue}</span></span>`;
                 if (differingHParamPaths.has(fullPath)) {
