@@ -1201,3 +1201,8 @@ body.resizing { /* Prevent text selection globally during resize */
     color: var(--text-primary);
     font-weight: 500;
 }
+
+.run-checkbox-item.run-item-interactive-highlight > label {
+    background-color: var(--hover-highlight-bg); /* Or any other highlight style */
+    font-weight: bold;
+}
