@@ -300,17 +300,59 @@ let activePlots = {}; // Structure: { metric_name: { wglp, ..., lines: { run_nam
 let debounceTimer = null;
 // Modified Cache Structure: Reflects backend change
 let frontendDataCache = {}; // Structure: { run_name: { scalars: { metric_name: { steps, values, wall_times } }, hydra_overrides: '...' | null } }
+let highlightedRunName = null; // NEW: Tracks the currently hovered run for highlighting
 let isResizing = false;
 let isReloading = false;
 
 // --- Color Palette & Mapping ---
-const COLORS = [
+const RAW_COLORS = [ // Renamed from COLORS to RAW_COLORS
     new ColorRGBA(0.12, 0.56, 1.0, 1), new ColorRGBA(1.0, 0.5, 0.05, 1),
     new ColorRGBA(0.17, 0.63, 0.17, 1), new ColorRGBA(0.84, 0.15, 0.16, 1),
     new ColorRGBA(0.58, 0.4, 0.74, 1),  new ColorRGBA(0.55, 0.34, 0.29, 1),
     new ColorRGBA(0.89, 0.47, 0.76, 1), new ColorRGBA(0.5, 0.5, 0.5, 1),
     new ColorRGBA(0.74, 0.74, 0.13, 1), new ColorRGBA(0.09, 0.75, 0.81, 1)
 ];
+const HIGHLIGHT_COLOR_DARK = new ColorRGBA(0.95, 0.95, 0.2, 1);  // Yellowish for dark mode
+const HIGHLIGHT_COLOR_LIGHT = new ColorRGBA(0.9, 0.2, 0.6, 1); // Magenta/Pink for light mode
+let currentHighlightColor = HIGHLIGHT_COLOR_DARK; // Will be updated by setTheme
+const COLOR_SIMILARITY_THRESHOLD = 0.5; // Adjusted: Euclidean distance threshold in RGB (0-1 range for each component)
+let COLORS = []; // Will be populated by updateFilteredRunColors
+
+/**
+ * Calculates the Euclidean distance between two ColorRGBA objects in RGB space.
+ * Alpha component is ignored.
+ * @param {ColorRGBA} color1
+ * @param {ColorRGBA} color2
+ * @returns {number} The distance between the colors.
+ */
+function calculateColorDistance(color1, color2) {
+    const dr = color1.r - color2.r;
+    const dg = color1.g - color2.g;
+    const db = color1.b - color2.b;
+    return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+
+/**
+ * Filters RAW_COLORS to exclude those too similar to currentHighlightColor.
+ * Resets runColorMap and colorIndex.
+ */
+function updateFilteredRunColors() {
+    COLORS = RAW_COLORS.filter(color => {
+        const distance = calculateColorDistance(color, currentHighlightColor);
+        return distance >= COLOR_SIMILARITY_THRESHOLD;
+    });
+
+    if (COLORS.length === 0) {
+        console.warn("All predefined run colors were too similar to the current highlight color. Using the original unfiltered list as a fallback.");
+        COLORS = [...RAW_COLORS]; // Fallback
+    } else if (COLORS.length < RAW_COLORS.length) {
+        console.log(`Filtered out ${RAW_COLORS.length - COLORS.length} run color(s) due to similarity with the highlight color. ${COLORS.length} colors remaining.`);
+    }
+
+    runColorMap.clear();
+    colorIndex = 0;
+    // Note: getRunColor will repopulate runColorMap on demand with new colors.
+}
 let colorIndex = 0;
 const runColorMap = new Map();
 
@@ -320,6 +362,58 @@ function getRunColor(runName) {
         colorIndex++;
     }
     return runColorMap.get(runName);
+}
+
+/**
+ * Handles mouse enter and leave events on run items in the selector.
+ * @param {string} hoveredRunNameParam - The name of the run being hovered.
+ * @param {boolean} isEntering - True if mouse is entering, false if leaving.
+ */
+function handleRunHover(hoveredRunNameParam, isEntering) {
+    if (isEntering) {
+        if (highlightedRunName && highlightedRunName !== hoveredRunNameParam) {
+            // Unhighlight previously hovered run if it's different
+            applyRunHighlight(highlightedRunName, false);
+        }
+        highlightedRunName = hoveredRunNameParam;
+        applyRunHighlight(hoveredRunNameParam, true);
+    } else { // isLeaving
+        // Only unhighlight if the mouse is leaving the currently highlighted run
+        if (highlightedRunName === hoveredRunNameParam) {
+            applyRunHighlight(hoveredRunNameParam, false);
+            highlightedRunName = null;
+        }
+    }
+}
+
+/**
+ * Applies or removes highlight effect for a specific run's lines in all plots.
+ * @param {string} runNameToModify - The name of the run to highlight/unhighlight.
+ * @param {boolean} shouldHighlight - True to highlight, false to unhighlight.
+ */
+function applyRunHighlight(runNameToModify, shouldHighlight) {
+    for (const metricName in activePlots) {
+        const plotInfo = activePlots[metricName];
+        const line = plotInfo.lines?.[runNameToModify];
+
+        if (line) {
+            if (shouldHighlight) {
+                if (!line.originalColor) { // Store original color only if not already stored
+                    // Always get the fresh base color from the map for 'originalColor'
+                    line.originalColor = getRunColor(runNameToModify);
+                }
+                line.color = currentHighlightColor;
+            } else { // Unhighlight
+                if (line.originalColor) {
+                    line.color = line.originalColor;
+                    delete line.originalColor;
+                } else {
+                    // Fallback: if originalColor is missing, ensure it's the base color.
+                    line.color = getRunColor(runNameToModify);
+                }
+            }
+        }
+    }
 }
 
 // --- Error Handling ---
@@ -547,6 +641,10 @@ function populateRunSelector() {
         div.appendChild(checkbox);
         div.appendChild(label);
         div.appendChild(hydraBtn); // Add button to the item div
+
+        // NEW: Add hover event listeners for highlighting
+        div.addEventListener('mouseenter', () => handleRunHover(runName, true));
+        div.addEventListener('mouseleave', () => handleRunHover(runName, false));
         runSelectorContainer.appendChild(div);
     });
 }
@@ -1266,9 +1364,19 @@ function createOrUpdatePlot(metricName, plotDataForMetric, parentElement) {
 
           let line = plotInfo.lines[runName];
           const numPoints = runData.steps.length;
-          const color = getRunColor(runName);
+          const baseColor = getRunColor(runName);
           const xyData = new Float32Array(numPoints * 2);
           let validPointCount = 0;
+
+        // Determine the color for the line (highlight or base)
+        let targetDisplayColor = baseColor;
+        let storeOriginalBaseColor = false;
+
+        if (runName === highlightedRunName) {
+            targetDisplayColor = currentHighlightColor;
+            storeOriginalBaseColor = true;
+        }
+
           for (let i = 0; i < numPoints; i++) {
               const step = runData.steps[i]; const value = runData.values[i];
               if (isFinite(step) && isFinite(value)) { xyData[validPointCount * 2] = step; xyData[validPointCount * 2 + 1] = value; validPointCount++; }
@@ -1277,14 +1385,35 @@ function createOrUpdatePlot(metricName, plotDataForMetric, parentElement) {
           if (validPointCount === 0) { if (line) line.visible = false; if (numPoints > 0) console.warn(`All data points for ${metricName}/${runName} were non-finite.`); return; }
           const finalXYData = xyData.slice(0, validPointCount * 2);
 
-          if (!line) {
-              line = new WebglLine(color, validPointCount); plotInfo.lines[runName] = line; wglp.addLine(line);
-              // console.log(`Added line for ${metricName}/${runName} with ${validPointCount} points.`);
-          } else if (line.numPoints !== validPointCount) {
-              // console.log(`Valid point count changed for ${metricName}/${runName} (${line.numPoints} -> ${validPointCount}). Recreating line.`);
-              try { const lineIndex = wglp.linesData.indexOf(line); if (lineIndex > -1) { wglp.linesData.splice(lineIndex, 1); } } catch (e) { console.warn(`Could not remove old line for ${metricName}/${runName}:`, e); }
-              line = new WebglLine(color, validPointCount); plotInfo.lines[runName] = line; wglp.addLine(line);
-          } else { line.color = color; } // Update color if needed
+        if (!line) { // Line doesn't exist, create it
+            line = new WebglLine(targetDisplayColor, validPointCount);
+            plotInfo.lines[runName] = line;
+            wglp.addLine(line);
+            if (storeOriginalBaseColor) {
+                line.originalColor = baseColor; // Store the actual base color
+            }
+        } else { // Line exists, update its properties
+            if (line.numPoints !== validPointCount) { // Recreate line if numPoints changed
+                try {
+                    const lineIndex = wglp.linesData.indexOf(line);
+                    if (lineIndex > -1) { wglp.linesData.splice(lineIndex, 1); }
+                } catch (e) { console.warn(`Could not remove old line for ${metricName}/${runName}:`, e); }
+
+                line = new WebglLine(targetDisplayColor, validPointCount);
+                plotInfo.lines[runName] = line;
+                wglp.addLine(line);
+                if (storeOriginalBaseColor) {
+                    line.originalColor = baseColor;
+                }
+            } else { // numPoints is the same, just update color
+                line.color = targetDisplayColor;
+                if (storeOriginalBaseColor) {
+                    if (!line.originalColor) line.originalColor = baseColor; // Ensure originalColor is stored
+                } else {
+                    if (line.originalColor) delete line.originalColor; // Not highlighted, remove originalColor
+                }
+            }
+        }
 
           line.xy = finalXYData; line.visible = true;
       });
@@ -1517,6 +1646,7 @@ function getZoomRectColorFromCSS() {
  * @param {string} theme - The desired theme ('light' or 'dark').
  */
 function setTheme(theme) {
+    console.log(`Attempting to set theme to: ${theme}`);
     const isLight = theme === 'light';
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem(THEME_STORAGE_KEY, theme);
@@ -1530,11 +1660,45 @@ function setTheme(theme) {
         themeToggleBtn.setAttribute('title', `Switch to ${isLight ? 'Dark' : 'Light'} Theme`);
     }
 
+    // Update currentHighlightColor
+    currentHighlightColor = isLight ? HIGHLIGHT_COLOR_LIGHT : HIGHLIGHT_COLOR_DARK;
+    console.log("currentHighlightColor set to:", currentHighlightColor);
+
+    // Re-filter run colors and reset color map
+    updateFilteredRunColors();
+
     // Update axis styles immediately after setting theme attribute
     updateAxisTextStyle();
 
     // Update zoom rectangle color for all active plots
     const newZoomRectColor = getZoomRectColorFromCSS();
+
+    // Update sidebar color swatches
+    const runItems = runSelectorContainer.querySelectorAll('.run-checkbox-item');
+    runItems.forEach(item => {
+        const checkbox = item.querySelector('input[type="checkbox"]');
+        const swatch = item.querySelector('.color-swatch');
+        if (checkbox && swatch) {
+            const runName = checkbox.value;
+            swatch.style.backgroundColor = getRunColor(runName).toString();
+        }
+    });
+
+    // Update colors of existing lines in plots
+    for (const metricName in activePlots) {
+        const plotInfo = activePlots[metricName];
+        if (plotInfo && plotInfo.lines) {
+            for (const runName in plotInfo.lines) {
+                const line = plotInfo.lines[runName];
+                if (line) {
+                    const newBaseColor = getRunColor(runName);
+                    line.color = (runName === highlightedRunName) ? currentHighlightColor : newBaseColor;
+                    if (runName === highlightedRunName) line.originalColor = newBaseColor; // Update stored original
+                    else if (line.originalColor) delete line.originalColor;
+                }
+            }
+        }
+    }
     for (const metricName in activePlots) {
         const plotInfo = activePlots[metricName];
         if (plotInfo && plotInfo.zoomRectLine) {
@@ -1542,8 +1706,7 @@ function setTheme(theme) {
         }
     }
 
-    // Trigger a resize/redraw of axes for existing plots
-    // We can force a resize which implicitly redraws axes in the next frame
+    // Trigger a resize which implicitly redraws axes in the next animation frame
     handleGlobalResize(); // Use the existing debounced resize handler
 
     console.log(`Theme set to: ${theme}`);
