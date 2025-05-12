@@ -605,6 +605,37 @@ function setupBulkActions() {
     deselectAllBtn.addEventListener('click', () => { runSelectorContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; }); handleRunSelectionChange(null, true); });
 }
 
+/**
+ * Compares the hparams of a base run with a list of other runs' hparams.
+ * @param {object} baseRunHParamsDict - The hparam_dict of the run being displayed in the modal.
+ * @param {Array<object>} otherSelectedRunsHParamsDicts - An array of hparam_dict objects from other selected runs.
+ * @returns {Set<string>} A set of hparam paths (e.g., "optimizer/lr") from the baseRunHParamsDict
+ *                        that are different or missing in at least one of the otherSelectedRunsHParamsDicts.
+ */
+function compareHParams(baseRunHParamsDict, otherSelectedRunsHParamsDicts) {
+    const differingPaths = new Set();
+    if (!baseRunHParamsDict || otherSelectedRunsHParamsDicts.length === 0) {
+        return differingPaths;
+    }
+
+    for (const path in baseRunHParamsDict) {
+        if (Object.prototype.hasOwnProperty.call(baseRunHParamsDict, path)) {
+            const baseValue = baseRunHParamsDict[path];
+            let isDifferentInOthers = false;
+            for (const otherDict of otherSelectedRunsHParamsDicts) {
+                if (!otherDict.hasOwnProperty(path) || JSON.stringify(otherDict[path]) !== JSON.stringify(baseValue)) {
+                    isDifferentInOthers = true;
+                    break;
+                }
+            }
+            if (isDifferentInOthers) {
+                differingPaths.add(path);
+            }
+        }
+    }
+    return differingPaths;
+}
+
 // --- Hydra Modal Logic ---
 async function handleViewDetailsClick(runName) {
     // Check for new modal elements
@@ -632,8 +663,8 @@ async function handleViewDetailsClick(runName) {
         frontendDataCache[runName] = {};
     }
 
-    let tbHParamsHtml = '';
-    let hparamsData; // Declare hparamsData in the function scope
+    let hparamsDataForModalRun; // Stores HParams for the runName (the one the modal is primarily for)
+    let differingHParamPaths = new Set();
     let errors = [];
 
     const runInfo = runInfoMap[runName] || { has_overrides: false, has_hparams: false };
@@ -677,38 +708,84 @@ async function handleViewDetailsClick(runName) {
     if (runInfo.has_hparams) {
         try {
             tbHParamsSection.style.display = 'block';
-            hparamsData = frontendDataCache[runName].hparams; // Assign to the higher-scoped hparamsData
-            if (hparamsData === undefined) {
+            hparamsDataForModalRun = frontendDataCache[runName].hparams;
+
+            if (hparamsDataForModalRun === undefined) {
                 const response = await fetch(`${API_BASE_URL}/api/hparams?run=${encodeURIComponent(runName)}`);
                 if (!response.ok) {
                     let errorMsg = `Failed to fetch TensorBoard HParams: ${response.status} ${response.statusText}`;
                      if (response.status === 404) {
                         errorMsg = `No TensorBoard HParams found for run '${runName}'.`;
-                        frontendDataCache[runName].hparams = null; // Cache as null
+                        frontendDataCache[runName].hparams = null;
                     } else {
                         try { const errorData = await response.json(); if (errorData && errorData.error) { errorMsg += ` - ${errorData.error}`; } } catch(e) {}
                     }
                     throw new Error(errorMsg);
                 }
-                hparamsData = await response.json();
-                frontendDataCache[runName].hparams = hparamsData; // Cache successful fetch
+                hparamsDataForModalRun = await response.json();
+                frontendDataCache[runName].hparams = hparamsDataForModalRun;
             }
 
-            if (hparamsData === null) { // Explicitly null means checked and none found
-                tbHParamsContentTree.innerHTML = `<p style="color: var(--text-secondary);">No TensorBoard HParams found.</p>`;
-            } else if (hparamsData && hparamsData.hparam_dict && Object.keys(hparamsData.hparam_dict).length > 0) {
-                const unflattenedHParams = unflattenObject(hparamsData.hparam_dict);
-                const treeElement = renderCollapsibleTree(unflattenedHParams);
+            // If HParams exist for the modal's run, proceed to comparison and rendering
+            if (hparamsDataForModalRun && hparamsDataForModalRun.hparam_dict) {
+                const otherSelectedRunNames = selectedRuns.filter(sr => sr !== runName);
+
+                if (otherSelectedRunNames.length > 0) {
+                    const hParamsPromises = otherSelectedRunNames.map(async (otherRunName) => {
+                        if (!frontendDataCache[otherRunName]) frontendDataCache[otherRunName] = {};
+                        let otherHParamsFullData = frontendDataCache[otherRunName].hparams;
+                        if (otherHParamsFullData === undefined) { // Not cached or previously failed
+                            try {
+                                const response = await fetch(`${API_BASE_URL}/api/hparams?run=${encodeURIComponent(otherRunName)}`);
+                                if (!response.ok) {
+                                    console.warn(`Comparison: Failed to fetch HParams for ${otherRunName}, status: ${response.status}`);
+                                    frontendDataCache[otherRunName].hparams = null; // Cache failure
+                                    return null;
+                                }
+                                otherHParamsFullData = await response.json();
+                                frontendDataCache[otherRunName].hparams = otherHParamsFullData;
+                            } catch (e) {
+                                console.warn(`Comparison: Error fetching HParams for ${otherRunName}:`, e);
+                                frontendDataCache[otherRunName].hparams = null; // Cache failure
+                                return null;
+                            }
+                        }
+                        return otherHParamsFullData?.hparam_dict; // Return only the dict portion
+                    });
+
+                    const otherHParamDicts = (await Promise.all(hParamsPromises)).filter(Boolean);
+
+                    if (otherHParamDicts.length > 0) {
+                        differingHParamPaths = compareHParams(hparamsDataForModalRun.hparam_dict, otherHParamDicts);
+                    }
+                }
+
+                // Update modal title/subtitle
+                let modalSubTitle = '';
+                if (selectedRuns.length > 1 && otherSelectedRunNames.length > 0) {
+                    modalSubTitle = ` (Comparing with ${otherSelectedRunNames.length} other selected run${otherSelectedRunNames.length > 1 ? 's' : ''}. Highlighted params differ.)`;
+                }
+                detailsModalRunName.innerHTML = `${escapeHtml(runName)} <span class="modal-subtitle">${escapeHtml(modalSubTitle)}</span>`;
+
+                // Render the tree
+                const unflattenedHParams = unflattenObject(hparamsDataForModalRun.hparam_dict);
+                const treeElement = renderCollapsibleTree(unflattenedHParams, true, differingHParamPaths);
                 tbHParamsContentTree.innerHTML = ''; // Clear loading message
                 tbHParamsContentTree.appendChild(treeElement);
-                hParamsSearchInput.style.display = 'block'; // Show search input
+                hParamsSearchInput.style.display = Object.keys(hparamsDataForModalRun.hparam_dict).length > 0 ? 'block' : 'none';
+
+            } else if (hparamsDataForModalRun === null) { // Explicitly null means checked and none found
+                tbHParamsContentTree.innerHTML = `<p style="color: var(--text-secondary);">No TensorBoard HParams found.</p>`;
+                detailsModalRunName.textContent = runName; // Reset subtitle
             } else {
                 tbHParamsContentTree.innerHTML = `<p style="color: var(--text-secondary);">No TensorBoard HParams data available.</p>`;
+                detailsModalRunName.textContent = runName; // Reset subtitle
             }
         } catch (error) {
             console.error(`Error fetching/displaying TensorBoard HParams for ${runName}:`, error);
             errors.push(`TensorBoard HParams: ${error.message || 'Could not load.'}`);
             tbHParamsContentTree.innerHTML = `<p style="color: var(--error-color);">Error loading TensorBoard HParams: ${escapeHtml(error.message)}</p>`;
+            detailsModalRunName.textContent = runName; // Reset subtitle
         }
     } else {
         tbHParamsContentTree.innerHTML = `<p style="color: var(--text-secondary);">TensorBoard HParams not available for this run.</p>`;
@@ -761,12 +838,13 @@ function unflattenObject(flatObject, separator = '/') {
  * Renders a nested object as an HTML collapsible tree.
  * @param {object} data The nested object to render.
  * @param {boolean} isRoot Whether this is the root of the tree.
+ * @param {Set<string>} differingHParamPaths A set of hparam paths that are different.
+ * @param {string} currentPath The current path in the object tree.
  * @returns {HTMLUListElement} The UL element representing the tree.
  */
-function renderCollapsibleTree(data, isRoot = true) {
+function renderCollapsibleTree(data, isRoot = true, differingHParamPaths = new Set(), currentPath = '') {
     const ul = document.createElement('ul');
     ul.className = isRoot ? 'collapsible-tree' : 'collapsible-tree-subtree';
-
     for (const key in data) {
         if (Object.prototype.hasOwnProperty.call(data, key)) {
             const li = document.createElement('li');
@@ -774,6 +852,7 @@ function renderCollapsibleTree(data, isRoot = true) {
 
             if (typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length > 0) {
                 li.classList.add('collapsible-item');
+                const fullPath = currentPath ? `${currentPath}/${key}` : key;
                 const toggle = document.createElement('span');
                 toggle.className = 'collapsible-toggle';
                 toggle.textContent = escapeHtml(key);
@@ -783,12 +862,16 @@ function renderCollapsibleTree(data, isRoot = true) {
                     if (subTree) subTree.style.display = li.classList.contains('expanded') ? 'block' : 'none';
                 });
                 li.appendChild(toggle);
-                const nestedUl = renderCollapsibleTree(value, false);
+                const nestedUl = renderCollapsibleTree(value, false, differingHParamPaths, fullPath);
                 nestedUl.style.display = 'none'; // Initially collapsed
                 li.appendChild(nestedUl);
             } else {
+                const fullPath = currentPath ? `${currentPath}/${key}` : key;
                 const displayValue = Array.isArray(value) ? `[${value.map(item => escapeHtml(String(item))).join(', ')}]` : (value === null ? 'null' : escapeHtml(String(value)));
                 li.innerHTML = `<span class="collapsible-leaf"><span class="collapsible-key">${escapeHtml(key)}:</span> <span class="collapsible-value">${displayValue}</span></span>`;
+                if (differingHParamPaths.has(fullPath)) {
+                    li.classList.add('hparam-differs');
+                }
             }
             ul.appendChild(li);
         }

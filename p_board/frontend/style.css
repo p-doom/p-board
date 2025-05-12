@@ -191,6 +191,8 @@ html[data-theme="light"] {
     --zoom-rect-g: 0.2;
     --zoom-rect-b: 0.6;
     --zoom-rect-a: 0.7; /* Less Transparent */
+    --highlight-background-very-weak: rgba(255, 224, 130, 0.2);
+    --highlight-accent-strong: orange;
 }
 
 /* Basic Reset */
@@ -1135,4 +1137,20 @@ body.resizing { /* Prevent text selection globally during resize */
   --zoom-rect-g: 0.7;
   --zoom-rect-b: 0.7;
   --zoom-rect-a: 0.6;
+  --highlight-background-very-weak: rgba(255, 193, 7, 0.1);
+  --highlight-accent-strong: #FFC107; 
+}
+
+.hparam-differs {
+    background-color: var(--highlight-background-very-weak);
+    border-left: 3px solid var(--highlight-accent-strong);
+    padding-left: 5px; 
+    margin-left: -8px; 
+}
+
+.modal-subtitle {
+    font-size: 0.8em;
+    color: var(--text-secondary);
+    font-weight: normal;
+    margin-left: 5px;
 }
