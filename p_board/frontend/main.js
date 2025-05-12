@@ -14,6 +14,7 @@ const runBulkControls = document.getElementById('run-bulk-controls');
 const selectAllBtn = document.getElementById('select-all-runs');
 const deselectAllBtn = document.getElementById('deselect-all-runs');
 const plotTooltip = document.getElementById('plot-tooltip'); // Tooltip Element
+const hparamHoverBox = document.getElementById('hparam-hover-box'); // New: HParam Hover Box
 const metricSearchInput = document.getElementById('metric-search-input');
 
 // Modal Elements (Updated for new structure)
@@ -583,6 +584,48 @@ async function fetchDataForSelectedRuns() {
     updatePlots(metricsDataForUpdate); // This function will call handleMetricSearch at the end
 }
 
+// --- NEW: Proactive HParam Fetching ---
+async function fetchHParamsForRunIfNeeded(runName) {
+    if (runInfoMap[runName]?.has_hparams && (!frontendDataCache[runName] || frontendDataCache[runName].hparams === undefined)) {
+        // console.log(`Fetching HParams for ${runName} (needed for hover/modal)`);
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/hparams?run=${encodeURIComponent(runName)}`);
+            if (!frontendDataCache[runName]) frontendDataCache[runName] = {};
+            if (!response.ok) {
+                console.warn(`Failed to fetch HParams for ${runName}: ${response.status}`);
+                frontendDataCache[runName].hparams = null; // Cache failure (404 or other error)
+                return null;
+            }
+            const data = await response.json();
+            frontendDataCache[runName].hparams = data;
+            // console.log(`Cached HParams for ${runName}`);
+            return data;
+        } catch (error) {
+            console.warn(`Error fetching HParams for ${runName}:`, error);
+            if (!frontendDataCache[runName]) frontendDataCache[runName] = {};
+            frontendDataCache[runName].hparams = null; // Cache error
+            return null;
+        }
+    } else if (frontendDataCache[runName]?.hparams) {
+        return frontendDataCache[runName].hparams; // Already cached
+    } else if (!runInfoMap[runName]?.has_hparams) {
+        return null; // No HParams for this run
+    }
+    return frontendDataCache[runName]?.hparams; // Return undefined if not fetched and no hparams flag
+}
+
+async function proactivelyFetchHParamsForSelectedRuns() {
+    const hparamFetchPromises = selectedRuns.map(runName => fetchHParamsForRunIfNeeded(runName));
+
+    try {
+        await Promise.allSettled(hparamFetchPromises);
+        // console.log("Proactive HParam fetching for selected runs complete (or not needed).");
+    } catch (error) {
+        console.warn("Error during proactive HParam fetching:", error);
+    }
+}
+
+
 
 // --- UI Update ---
 function populateRunSelector() {
@@ -646,6 +689,13 @@ function populateRunSelector() {
         div.addEventListener('mouseenter', () => handleRunHover(runName, true));
         div.addEventListener('mouseleave', () => handleRunHover(runName, false));
         runSelectorContainer.appendChild(div);
+
+        // HParam hover for run list items
+        div.addEventListener('mouseenter', async (e) => {
+            const details = await getDifferingHParamsDetails(runName, selectedRuns);
+            if (details) showHParamHoverBox(details, e.clientX, e.clientY, runName);
+        });
+        div.addEventListener('mouseleave', hideHParamHoverBox);
     });
 }
 
@@ -691,6 +741,7 @@ function handleRunSelectionChange(event, fromBulkAction = false) {
 }
 async function fetchDataAndResetView() {
     await fetchDataForSelectedRuns(); // Fetches scalar data if needed
+    await proactivelyFetchHParamsForSelectedRuns(); // Fetch HParams for selected runs
     for (const metricName in activePlots) { // Reset view for existing plots
         const plotInfo = activePlots[metricName];
         if (plotInfo && isFinite(plotInfo.minStep) && isFinite(plotInfo.maxStep) && isFinite(plotInfo.minY) && isFinite(plotInfo.maxY)) {
@@ -735,6 +786,8 @@ function compareHParams(baseRunHParamsDict, otherSelectedRunsHParamsDicts) {
 }
 
 // --- Hydra Modal Logic ---
+
+
 async function handleViewDetailsClick(runName) {
     // Check for new modal elements
     if (!hydraModal || !detailsModalRunName || !hydraOverridesSection || !hydraOverridesContent || !tbHParamsSection || !hParamsSearchInput || !tbHParamsContentTree) {
@@ -743,6 +796,7 @@ async function handleViewDetailsClick(runName) {
         return;
     }
 
+    hideHParamHoverBox(); // Hide hover box when modal opens
     console.log(`Requesting details for run: ${runName}`);
     detailsModalRunName.textContent = runName; // Show run name immediately
 
@@ -807,50 +861,18 @@ async function handleViewDetailsClick(runName) {
         try {
             tbHParamsSection.style.display = 'block';
             hparamsDataForModalRun = frontendDataCache[runName].hparams;
-
-            if (hparamsDataForModalRun === undefined) {
-                const response = await fetch(`${API_BASE_URL}/api/hparams?run=${encodeURIComponent(runName)}`);
-                if (!response.ok) {
-                    let errorMsg = `Failed to fetch TensorBoard HParams: ${response.status} ${response.statusText}`;
-                     if (response.status === 404) {
-                        errorMsg = `No TensorBoard HParams found for run '${runName}'.`;
-                        frontendDataCache[runName].hparams = null;
-                    } else {
-                        try { const errorData = await response.json(); if (errorData && errorData.error) { errorMsg += ` - ${errorData.error}`; } } catch(e) {}
-                    }
-                    throw new Error(errorMsg);
-                }
-                hparamsDataForModalRun = await response.json();
-                frontendDataCache[runName].hparams = hparamsDataForModalRun;
+            if (hparamsDataForModalRun === undefined) { // Not cached or previously failed with undefined
+                hparamsDataForModalRun = await fetchHParamsForRunIfNeeded(runName);
+                // fetchHParamsForRunIfNeeded updates the cache
             }
 
             // If HParams exist for the modal's run, proceed to comparison and rendering
             if (hparamsDataForModalRun && hparamsDataForModalRun.hparam_dict) {
                 const otherSelectedRunNames = selectedRuns.filter(sr => sr !== runName);
-
                 if (otherSelectedRunNames.length > 0) {
-                    const hParamsPromises = otherSelectedRunNames.map(async (otherRunName) => {
-                        if (!frontendDataCache[otherRunName]) frontendDataCache[otherRunName] = {};
-                        let otherHParamsFullData = frontendDataCache[otherRunName].hparams;
-                        if (otherHParamsFullData === undefined) { // Not cached or previously failed
-                            try {
-                                const response = await fetch(`${API_BASE_URL}/api/hparams?run=${encodeURIComponent(otherRunName)}`);
-                                if (!response.ok) {
-                                    console.warn(`Comparison: Failed to fetch HParams for ${otherRunName}, status: ${response.status}`);
-                                    frontendDataCache[otherRunName].hparams = null; // Cache failure
-                                    return null;
-                                }
-                                otherHParamsFullData = await response.json();
-                                frontendDataCache[otherRunName].hparams = otherHParamsFullData;
-                            } catch (e) {
-                                console.warn(`Comparison: Error fetching HParams for ${otherRunName}:`, e);
-                                frontendDataCache[otherRunName].hparams = null; // Cache failure
-                                return null;
-                            }
-                        }
-                        return otherHParamsFullData?.hparam_dict; // Return only the dict portion
-                    });
-
+                    const hParamsPromises = otherSelectedRunNames.map(otherRunName =>
+                        fetchHParamsForRunIfNeeded(otherRunName).then(data => data?.hparam_dict)
+                    );
                     const otherHParamDicts = (await Promise.all(hParamsPromises)).filter(Boolean);
 
                     if (otherHParamDicts.length > 0) {
@@ -914,6 +936,103 @@ async function handleViewDetailsClick(runName) {
         p.textContent = 'No details (Hydra Overrides or TensorBoard HParams) available for this run.';
         tbHParamsContentTree.appendChild(p);
     }
+}
+
+// --- NEW: HParam Hover Box Logic ---
+async function getDifferingHParamsDetails(hoveredRunName, currentSelectedRuns) {
+    const runInfo = runInfoMap[hoveredRunName];
+    if (!runInfo || !runInfo.has_hparams) {
+        return { message: "No HParams available for this run." };
+    }
+
+    const baseRunHParamsData = await fetchHParamsForRunIfNeeded(hoveredRunName);
+
+    if (baseRunHParamsData === null) { // Explicitly null means fetch failed or no HParams
+        return { message: "HParams data not found for this run." };
+    }
+    if (!baseRunHParamsData || !baseRunHParamsData.hparam_dict) { // Should be caught by above, but defensive
+        return { error: "Error loading HParams for this run." };
+    }
+
+    const otherSelectedRunNamesWithHParams = currentSelectedRuns.filter(
+        sr => sr !== hoveredRunName && runInfoMap[sr]?.has_hparams
+    );
+
+    if (otherSelectedRunNamesWithHParams.length === 0) {
+        return {
+            hparams: baseRunHParamsData.hparam_dict,
+            allKeys: Object.keys(baseRunHParamsData.hparam_dict).sort(),
+            message: "No other selected runs with HParams to compare."
+        };
+    }
+
+    const otherHParamDictPromises = otherSelectedRunNamesWithHParams.map(otherRun =>
+        fetchHParamsForRunIfNeeded(otherRun).then(data => data?.hparam_dict)
+    );
+    const otherHParamDicts = (await Promise.all(otherHParamDictPromises)).filter(Boolean);
+
+    if (otherHParamDicts.length === 0) {
+        return {
+            hparams: baseRunHParamsData.hparam_dict,
+            allKeys: Object.keys(baseRunHParamsData.hparam_dict).sort(),
+            message: "Could not load HParams for other selected runs for comparison."
+        };
+    }
+
+    const differingPaths = compareHParams(baseRunHParamsData.hparam_dict, otherHParamDicts);
+    return {
+        hparams: baseRunHParamsData.hparam_dict,
+        differingPaths: differingPaths, // This is a Set
+        comparedWith: otherHParamDicts.length // Number of runs actually compared against
+    };
+}
+
+function showHParamHoverBox(details, screenX, screenY, runNameForTitle) {
+    if (!hparamHoverBox || !details) return;
+
+    let content = `<strong>${escapeHtml(runNameForTitle)} HParams</strong>`;
+
+    if (details.error) {
+        content += `<p style="color: var(--error-color);">${escapeHtml(details.error)}</p>`;
+    } else if (details.message && !details.hparams) { // Message like "No HParams available"
+        content += `<p style="color: var(--text-secondary);">${escapeHtml(details.message)}</p>`;
+    } else if (details.hparams && details.differingPaths && details.differingPaths.size > 0) {
+        content += `<p style="font-size: 0.9em; color: var(--text-secondary); margin-bottom: var(--spacing-xs);">Differs from ${details.comparedWith} other selected run${details.comparedWith > 1 ? 's' : ''} in:</p><ul>`;
+        const pathsToShow = Array.from(details.differingPaths).sort().slice(0, 5); // Show max 5
+        pathsToShow.forEach(path => {
+            const value = details.hparams[path];
+            content += `<li><span class="hparam-path">${escapeHtml(path)}:</span> <span class="hparam-value">${escapeHtml(String(value))}</span></li>`;
+        });
+        if (details.differingPaths.size > 5) {
+            content += `<li style="color: var(--text-secondary); font-style: italic;">...and ${details.differingPaths.size - 5} more</li>`;
+        }
+        content += `</ul>`;
+    } else if (details.hparams && details.comparedWith > 0) { // Compared, but no differences
+        content += `<p style="color: var(--text-secondary);">No differing HParams found compared to ${details.comparedWith} other selected run${details.comparedWith > 1 ? 's' : ''}.</p>`;
+    } else if (details.hparams && details.allKeys) { // No comparison or no other runs with HParams, show all for this run
+        content += `<p style="font-size: 0.9em; color: var(--text-secondary); margin-bottom: var(--spacing-xs);">HParams for this run${details.message ? ` (${escapeHtml(details.message.toLowerCase().replace('.', ''))})` : ''}:</p><ul>`;
+        const keysToShow = details.allKeys.slice(0, 5);
+        keysToShow.forEach(path => {
+            const value = details.hparams[path];
+            content += `<li><span class="hparam-path">${escapeHtml(path)}:</span> <span class="hparam-value">${escapeHtml(String(value))}</span></li>`;
+        });
+        if (details.allKeys.length > 5) {
+            content += `<li style="color: var(--text-secondary); font-style: italic;">...and ${details.allKeys.length - 5} more</li>`;
+        }
+        content += `</ul>`;
+    } else { // Fallback, e.g., HParams available but some other condition not met
+        content += `<p style="color: var(--text-secondary);">${details.message || 'HParams available.'}</p>`;
+    }
+
+    hparamHoverBox.innerHTML = content;
+    // Basic positioning, can be refined
+    hparamHoverBox.style.left = `${screenX + 10}px`;
+    hparamHoverBox.style.top = `${screenY + 10}px`;
+    hparamHoverBox.style.display = 'block';
+}
+
+function hideHParamHoverBox() {
+    if (hparamHoverBox) hparamHoverBox.style.display = 'none';
 }
 
 /**
@@ -1460,6 +1579,7 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
          e.preventDefault();
          if (plotInfo && isFinite(plotInfo.minStep) && isFinite(plotInfo.maxStep) && isFinite(plotInfo.minY) && isFinite(plotInfo.maxY)) { setPlotAxes(wglp, plotInfo.minStep, plotInfo.maxStep, plotInfo.minY, plotInfo.maxY); }
          zoomRectLine.visible = false; tooltipElement.style.display = 'none';
+         hideHParamHoverBox();
      });
      canvas.addEventListener('mousedown', (e) => {
          e.preventDefault(); canvas.focus(); tooltipElement.style.display = 'none';
@@ -1467,6 +1587,7 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
          const offsetX = e.clientX - mainCanvasRect.left; const offsetY = e.clientY - mainCanvasRect.top;
          const currentNdcX = (2 * (offsetX * devicePixelRatio) / canvas.width) - 1;
          const currentNdcY = 1 - (2 * (offsetY * devicePixelRatio) / canvas.height);
+         hideHParamHoverBox();
          if (e.button === 0) { // Left Click: Zoom Rect
              isZoomingRect = true; isDragging = false; zoomRectStartXNDC = currentNdcX; zoomRectStartYNDC = currentNdcY;
              try { const startPlotCoords = ndcToPlotCoords(zoomRectStartXNDC, zoomRectStartYNDC); if (!isFinite(startPlotCoords.x) || !isFinite(startPlotCoords.y)) throw new Error("Invalid start coords"); zoomRectLine.xy = new Float32Array([ startPlotCoords.x, startPlotCoords.y, startPlotCoords.x, startPlotCoords.y, startPlotCoords.x, startPlotCoords.y, startPlotCoords.x, startPlotCoords.y, ]); zoomRectLine.visible = true; canvas.style.cursor = 'crosshair'; }
@@ -1477,7 +1598,7 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
      });
      canvas.addEventListener('mousemove', (e) => {
          if (isDragging || isZoomingRect) {
-              tooltipElement.style.display = 'none'; e.preventDefault();
+              tooltipElement.style.display = 'none'; hideHParamHoverBox(); e.preventDefault();
               const mainCanvasRect = getMainCanvasRect(); if (!mainCanvasRect) return;
               const offsetX = e.clientX - mainCanvasRect.left; const offsetY = e.clientY - mainCanvasRect.top;
               const currentNdcX = (2 * (offsetX * devicePixelRatio) / canvas.width) - 1;
@@ -1493,7 +1614,7 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
           }
           // --- Tooltip Logic ---
           canvas.style.cursor = 'grab'; const mainCanvasRect = getMainCanvasRect(); if (!mainCanvasRect) { tooltipElement.style.display = 'none'; return; }
-          const cursorScreenX = e.clientX; const cursorScreenY = e.clientY; const cursorCanvasX = cursorScreenX - mainCanvasRect.left; const cursorCanvasY = cursorScreenY - mainCanvasRect.top;
+          const cursorScreenX = e.clientX; const cursorScreenY = e.clientY; const cursorCanvasX = cursorScreenX - mainCanvasRect.left; const cursorCanvasY = cursorScreenY - mainCanvasRect.top; // These are relative to canvas
           const plotCoords = screenToPlotCoords(cursorScreenX, cursorScreenY); if (!isFinite(plotCoords.x) || !isFinite(plotCoords.y)) { tooltipElement.style.display = 'none'; return; }
           let minScreenDistanceSq = TOOLTIP_CLOSENESS_THRESHOLD_PX_SQ; let closestPointInfo = null;
           for (const runName in plotInfo.lines) {
@@ -1518,12 +1639,26 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
                if (tooltipX < 10) tooltipX = 10; if (tooltipY < 10) tooltipY = 10;
                tooltipElement.style.left = `${tooltipX}px`; tooltipElement.style.top = `${tooltipY}px`; tooltipElement.style.display = 'block';
           } else { tooltipElement.style.display = 'none'; }
+
+          // HParam Hover Box Logic for plot lines
+            if (closestPointInfo) {
+                getDifferingHParamsDetails(closestPointInfo.runName, selectedRuns).then(details => {
+                    if (details && plotTooltip.style.display === 'block') { // Only show if plot tooltip is also showing
+                        // Adjust positioning if plotTooltip is also visible to avoid overlap
+                        let hparamX = e.clientX + 10;
+                        let hparamY = e.clientY - 10 - (hparamHoverBox?.offsetHeight || 40); // Position above cursor
+                        showHParamHoverBox(details, hparamX, hparamY, closestPointInfo.runName);
+                    } else {
+                        hideHParamHoverBox();
+                    }
+                }).catch(err => { console.warn("Error for HParam hover on plot:", err); hideHParamHoverBox(); });
+            } else {
+                hideHParamHoverBox();
+            }
      }); // End mousemove
      canvas.addEventListener('mouseup', (e) => {
           if (!isDragging && !isZoomingRect) return; e.preventDefault(); const mainCanvasRect = getMainCanvasRect(); if (!mainCanvasRect) return;
-          const offsetX = e.clientX - mainCanvasRect.left; const offsetY = e.clientY - mainCanvasRect.top;
-          const endNdcX = (2 * (offsetX * devicePixelRatio) / canvas.width) - 1;
-          const endNdcY = 1 - (2 * (offsetY * devicePixelRatio) / canvas.height);
+          const offsetX = e.clientX - mainCanvasRect.left; const offsetY = e.clientY - mainCanvasRect.top; const endNdcX = (2 * (offsetX * devicePixelRatio) / canvas.width) - 1; const endNdcY = 1 - (2 * (offsetY * devicePixelRatio) / canvas.height);
           if (isDragging) { isDragging = false; canvas.style.cursor = 'grab'; }
           else if (isZoomingRect) {
               isZoomingRect = false; zoomRectLine.visible = false; canvas.style.cursor = 'grab';
@@ -1535,8 +1670,14 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
               }
           }
      }); // End mouseup
-     canvas.addEventListener('mouseleave', (e) => { if (isDragging) { isDragging = false; canvas.style.cursor = 'grab'; } if (isZoomingRect) { isZoomingRect = false; zoomRectLine.visible = false; canvas.style.cursor = 'grab'; } tooltipElement.style.display = 'none'; }); // End mouseleave
+     canvas.addEventListener('mouseleave', (e) => {
+         if (isDragging) { isDragging = false; canvas.style.cursor = 'grab'; }
+         if (isZoomingRect) { isZoomingRect = false; zoomRectLine.visible = false; canvas.style.cursor = 'grab'; }
+         tooltipElement.style.display = 'none';
+         hideHParamHoverBox();
+        }); // End mouseleave
      canvas.addEventListener('wheel', (e) => {
+        hideHParamHoverBox(); // Hide on scroll/zoom actions
         if (e.shiftKey) {
             e.preventDefault(); tooltipElement.style.display = 'none'; const zoomFactor = 1.1; const scaleDelta = e.deltaY < 0 ? zoomFactor : 1 / zoomFactor; const mainCanvasRect = getMainCanvasRect(); if (!mainCanvasRect) return; const offsetX = e.clientX - mainCanvasRect.left; const offsetY = e.clientY - mainCanvasRect.top;
             const cursorNDC_X = (2 * (offsetX * devicePixelRatio) / canvas.width) - 1;
@@ -1546,7 +1687,12 @@ function setupInteractions(canvas, wglp, zoomRectLine, plotInfo, tooltipElement,
      }, { passive: false });
      // --- Touch Interactions (Keep as before) ---
      let isPinching = false; let isTouchPanning = false; let touchStartX0 = 0, touchStartY0 = 0; let initialPinchDistance = 0; let touchPlotOffsetXOld = 0, touchPlotOffsetYOld = 0; let initialPinchCenterX = 0, initialPinchCenterY = 0;
-     canvas.addEventListener('touchstart', (e) => { e.preventDefault(); zoomRectLine.visible = false; tooltipElement.style.display = 'none'; if (e.touches.length === 1) { isTouchPanning = true; isPinching = false; const touch = e.touches[0]; touchStartX0 = touch.clientX; touchStartY0 = touch.clientY; touchPlotOffsetXOld = wglp.gOffsetX; touchPlotOffsetYOld = wglp.gOffsetY; } else if (e.touches.length === 2) { isPinching = true; isTouchPanning = false; const t0 = e.touches[0]; const t1 = e.touches[1]; initialPinchCenterX = (t0.clientX + t1.clientX) / 2; initialPinchCenterY = (t0.clientY + t1.clientY) / 2; initialPinchDistance = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY); touchPlotOffsetXOld = wglp.gOffsetX; touchPlotOffsetYOld = wglp.gOffsetY; } else { isTouchPanning = false; isPinching = false; } }, { passive: false });
+     canvas.addEventListener('touchstart', (e) => {
+         e.preventDefault(); zoomRectLine.visible = false; tooltipElement.style.display = 'none';
+         hideHParamHoverBox();
+         if (e.touches.length === 1) { isTouchPanning = true; isPinching = false; const touch = e.touches[0]; touchStartX0 = touch.clientX; touchStartY0 = touch.clientY; touchPlotOffsetXOld = wglp.gOffsetX; touchPlotOffsetYOld = wglp.gOffsetY; }
+         else if (e.touches.length === 2) { isPinching = true; isTouchPanning = false; const t0 = e.touches[0]; const t1 = e.touches[1]; initialPinchCenterX = (t0.clientX + t1.clientX) / 2; initialPinchCenterY = (t0.clientY + t1.clientY) / 2; initialPinchDistance = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY); touchPlotOffsetXOld = wglp.gOffsetX; touchPlotOffsetYOld = wglp.gOffsetY; }
+         else { isTouchPanning = false; isPinching = false; } }, { passive: false });
      canvas.addEventListener('touchmove', (e) => { e.preventDefault(); tooltipElement.style.display = 'none'; const mainCanvasRect = getMainCanvasRect(); if (!mainCanvasRect) return; if (isTouchPanning && e.touches.length === 1) { const touch = e.touches[0]; const dxScreen = (touch.clientX - touchStartX0) * devicePixelRatio; const dyScreen = (touch.clientY - touchStartY0) * devicePixelRatio; const deltaOffsetX = (canvas.width > 0) ? (dxScreen / canvas.width) * 2 : 0; const deltaOffsetY = (canvas.height > 0) ? (-dyScreen / canvas.height) * 2 : 0; wglp.gOffsetX = touchPlotOffsetXOld + deltaOffsetX; wglp.gOffsetY = touchPlotOffsetYOld + deltaOffsetY; } else if (isPinching && e.touches.length === 2) { const t0 = e.touches[0]; const t1 = e.touches[1]; const currentDist = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY); const currentCenterX = (t0.clientX + t1.clientX) / 2; const currentCenterY = (t0.clientY + t1.clientY) / 2; const scaleDelta = (initialPinchDistance > 1e-6) ? currentDist / initialPinchDistance : 1; const centerOffsetX = currentCenterX - mainCanvasRect.left; const centerOffsetY = currentCenterY - mainCanvasRect.top;
      const centerNDC_X = (2 * (centerOffsetX * devicePixelRatio) / canvas.width) - 1;
      const centerNDC_Y = 1 - (2 * (centerOffsetY * devicePixelRatio) / canvas.height);
@@ -1752,6 +1898,7 @@ async function handleReloadClick() {
         loadingIndicator.textContent = 'Reloading data...'; // More specific message
         loadingIndicator.style.display = 'block';
     }
+    hideHParamHoverBox();
     clearError(); // Clear previous errors
     console.log("--- Manual Reload Triggered ---");
 
@@ -1779,6 +1926,7 @@ async function handleReloadClick() {
 // --- Initialization --- //
 async function initialize() {
     if (!plotTooltip) { console.error("FATAL: Tooltip element #plot-tooltip not found!"); displayError("Initialization failed: Tooltip element missing."); return; }
+    if (!hparamHoverBox) { console.warn("HParam hover box element #hparam-hover-box not found. HParam hover disabled."); }
     if (!hydraModal) { console.warn("Hydra modal element #hydra-modal not found. Override viewing disabled."); /* Continue without modal */ }
     if (!themeToggleBtn || !themeIconSun || !themeIconMoon) { console.warn("Theme toggle elements not found. Theme switching disabled."); }
     if (!reloadBtn) { console.warn("Reload button element not found."); }
